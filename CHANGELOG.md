@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.2.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.1.0%0Dv1.2.0) (2024-03-25)
+
+
+### Features
+
+* chain loops ([cb40159](https://github.com/ttessarolo/runnable/commits/cb40159f97289d0f4a6c17fd28365f09dc103338))
+
 ## [1.1.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.0.2%0Dv1.1.0) (2024-03-25)
 
 
