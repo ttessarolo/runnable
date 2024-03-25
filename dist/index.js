@@ -18,20 +18,26 @@ var __asyncGenerator = (this && this.__asyncGenerator) || function (thisArg, _ar
     function reject(value) { resume("throw", value); }
     function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
 };
-var _a, e_1, _b, _c;
-// import * as EventEmitter from "node:events";
-// import { on } from "node:events";
 import EventEmitter, { on } from "node:events";
+import { v4 as uuidv4 } from "uuid";
 const isFunc = (obj) => typeof obj === "function" || obj instanceof Runnable;
+var StepType;
+(function (StepType) {
+    StepType["INIT"] = "init";
+    StepType["PIPE"] = "pipe";
+    StepType["ASSIGN"] = "assign";
+    StepType["PASSTHROUGH"] = "passThrough";
+    StepType["PICK"] = "pick";
+    StepType["ROOTER"] = "rooter";
+})(StepType || (StepType = {}));
+const sleep = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
 class Runnable {
-    constructor(state, name, params = {}) {
-        var _a, _b;
+    constructor(state, params = {}) {
+        var _a;
         this.steps = [];
-        this.emitEnd = true;
-        this.name = name;
+        this.name = params.name;
         this.state = state;
         this.emitter = (_a = params.emitter) !== null && _a !== void 0 ? _a : new EventEmitter();
-        this.emitEnd = (_b = params.emitEnd) !== null && _b !== void 0 ? _b : true;
         return this;
     }
     on(event, fnc) {
@@ -41,30 +47,33 @@ class Runnable {
     emit(event, ...args) {
         return this.emitter.emit(event, ...args);
     }
+    setStep(step) {
+        this.steps.push(step);
+    }
     pipe(fnc) {
-        this.steps.push({ step: fnc, type: "pipe" });
+        this.setStep({ step: fnc, type: StepType.PIPE });
         return this;
     }
     assign(key, fnc) {
-        this.steps.push({ step: key, type: "assign", fnc: fnc });
+        this.setStep({ step: key, type: StepType.ASSIGN, fnc: fnc });
         return this;
     }
     passThrough(fnc) {
-        this.steps.push({ step: fnc, type: "passThrough" });
+        this.setStep({ step: fnc, type: StepType.PASSTHROUGH });
         return this;
     }
     pick(keys) {
-        this.steps.push({ step: keys, type: "pick" });
+        this.setStep({ step: keys, type: StepType.PICK });
         return this;
     }
     rooter(fnc) {
-        this.steps.push({ step: fnc, type: "rooter" });
+        this.setStep({ step: fnc, type: StepType.ROOTER });
         return this;
     }
     async _exec(fnc) {
         const stato = structuredClone(this.state);
         return fnc instanceof Runnable
-            ? await fnc.run(stato, { emitter: this.emitter, emitEnd: false })
+            ? await fnc.run(stato, { emitter: this.emitter })
             : await fnc(stato, this.emitter);
     }
     async _pipe(fnc) {
@@ -115,16 +124,6 @@ class Runnable {
         const step = 1;
         return {
             next: () => {
-                var _a;
-                const type = (_a = this.steps[nextIndex]) === null || _a === void 0 ? void 0 : _a.type;
-                this.emit("step", {
-                    id: nextIndex + 1,
-                    step: type ? "step" : "end",
-                    type,
-                    total: end,
-                    name: this.name,
-                    state: this.state
-                });
                 if (nextIndex < end) {
                     const result = { value: this.steps[nextIndex], done: false };
                     nextIndex += step;
@@ -134,24 +133,35 @@ class Runnable {
             }
         };
     }
+    emitStep(type) {
+        this.emit("step", {
+            id: uuidv4(),
+            type,
+            origin: this.name,
+            state: this.state
+        });
+    }
     async iterate(iteration) {
         if (!iteration.done) {
             const { step, type, fnc } = iteration.value;
             switch (type) {
-                case "pipe":
+                case StepType.INIT:
+                    await sleep(1);
+                    break;
+                case StepType.PIPE:
                     await this._pipe(step);
                     break;
-                case "assign":
+                case StepType.ASSIGN:
                     await this._assign(step, fnc);
                     break;
-                case "passThrough":
+                case StepType.PASSTHROUGH:
                     await this._passThrough(step);
                     break;
-                case "pick":
+                case StepType.PICK:
                     await this._pick(step);
                     break;
             }
-            this.emit("step", this.state);
+            this.emitStep(type);
             await this.iterate(this.iterator.next());
         }
     }
@@ -160,8 +170,8 @@ class Runnable {
             this.state = Object.assign(Object.assign({}, this.state), state);
         if (params.emitter)
             this.emitter = params.emitter;
-        if (params.emitEnd !== undefined)
-            this.emitEnd = params.emitEnd;
+        if (params.name)
+            this.name = params.name;
         this.iterator = this.stepsIterator();
     }
     async run(state, params = {}) {
@@ -170,8 +180,8 @@ class Runnable {
         return this.state;
     }
     stream(state_1) {
-        return __asyncGenerator(this, arguments, function* stream_2(state, params = {}) {
-            var _a, e_2, _b, _c;
+        return __asyncGenerator(this, arguments, function* stream_1(state, params = {}) {
+            var _a, e_1, _b, _c;
             this._warm(state, params);
             this.iterate(this.iterator.next());
             try {
@@ -179,24 +189,20 @@ class Runnable {
                     _c = _f.value;
                     _d = false;
                     const [iteration] = _c;
-                    console.log("*", iteration);
                     yield yield __await(iteration);
-                    if (iteration.step === "end")
-                        break;
                 }
             }
-            catch (e_2_1) { e_2 = { error: e_2_1 }; }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
             finally {
                 try {
                     if (!_d && !_a && (_b = _e.return)) yield __await(_b.call(_e));
                 }
-                finally { if (e_2) throw e_2.error; }
+                finally { if (e_1) throw e_1.error; }
             }
-            return yield __await(this.state);
         });
     }
-    static from(steps, name) {
-        const r = new Runnable({}, name);
+    static from(steps, params = {}) {
+        const r = new Runnable({}, params);
         for (const step of steps) {
             if (isFunc(step))
                 r.pipe(step);
@@ -205,18 +211,20 @@ class Runnable {
         }
         return r;
     }
-    static init(state = {}, name, params = {}) {
-        return new Runnable(state, name, params);
+    static init(state = {}, params = {}) {
+        const runnable = new Runnable(state, params);
+        runnable.setStep({ type: StepType.INIT });
+        return runnable;
     }
 }
-const sub = Runnable.from([
+const subSequence = Runnable.from([
     { k: async () => "O", j: 1 },
     async (state) => {
         state.y = "ciao";
         return state;
     }
-], "sub:seq");
-const main = Runnable.init({ a: 1 }, "main:seq")
+], { name: "sub:seq" });
+const main = Runnable.init({ a: 1 }, { name: "main:seq" })
     .assign({ b: async () => await 2 })
     .passThrough((state, emitter) => {
     if (state.a === 1)
@@ -226,25 +234,8 @@ const main = Runnable.init({ a: 1 }, "main:seq")
     state.c = 3;
     return state;
 })
-    .pipe(sub)
-    .pick("j");
-// .on("passThrough", (state: any) => console.log("check", state))
-// .on("step", (step: object) => console.log(step))
-// .on("end", (state: object, name: string) => console.log("end", state, name));
-//const res = await main.run();
-const stream = main.stream();
-try {
-    for (var _d = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = await stream_1.next(), _a = stream_1_1.done, !_a; _d = true) {
-        _c = stream_1_1.value;
-        _d = false;
-        const { state } = _c;
-        console.log(state);
-    }
-}
-catch (e_1_1) { e_1 = { error: e_1_1 }; }
-finally {
-    try {
-        if (!_d && !_a && (_b = stream_1.return)) await _b.call(stream_1);
-    }
-    finally { if (e_1) throw e_1.error; }
-}
+    .pipe(subSequence)
+    .pick("j")
+    .on("check", (msg) => console.log(msg));
+const res = await main.run();
+console.log(res);
