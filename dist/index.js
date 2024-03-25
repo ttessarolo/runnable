@@ -20,6 +20,7 @@ var __asyncGenerator = (this && this.__asyncGenerator) || function (thisArg, _ar
 };
 import EventEmitter, { on } from "node:events";
 import { v4 as uuidv4 } from "uuid";
+// import "./types.ts";
 const isFunc = (obj) => typeof obj === "function" || obj instanceof Runnable;
 var StepType;
 (function (StepType) {
@@ -28,13 +29,29 @@ var StepType;
     StepType["ASSIGN"] = "assign";
     StepType["PASSTHROUGH"] = "passThrough";
     StepType["PICK"] = "pick";
-    StepType["ROOTER"] = "rooter";
+    StepType["SWITCH"] = "switch";
+    StepType["PARALLEL"] = "parallel";
+    StepType["LOOP"] = "loop";
 })(StepType || (StepType = {}));
 const sleep = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
+function getDeep(obj, path) {
+    return path.split(".").reduce((acc, key) => acc[key], obj);
+}
+function setDeep(obj, path, value) {
+    const keys = path.split(".");
+    const last = keys.pop();
+    const lastObj = keys.reduce((acc, key) => {
+        if (!acc[key])
+            acc[key] = {};
+        return acc[key];
+    }, obj);
+    lastObj[last] = value;
+}
 class Runnable {
     constructor(state, params = {}) {
         var _a;
         this.steps = [];
+        this.nextStep = 0;
         this.name = params.name;
         this.state = state;
         this.emitter = (_a = params.emitter) !== null && _a !== void 0 ? _a : new EventEmitter();
@@ -66,8 +83,28 @@ class Runnable {
         this.setStep({ step: keys, type: StepType.PICK });
         return this;
     }
-    rooter(fnc) {
-        this.setStep({ step: fnc, type: StepType.ROOTER });
+    switch(fnc, options = {}) {
+        this.setStep({ step: fnc, type: StepType.SWITCH, options });
+        return this;
+    }
+    switchAll(fnc, options = {}) {
+        this.setStep({
+            step: fnc,
+            type: StepType.SWITCH,
+            options: Object.assign(Object.assign({}, options), { processAll: true })
+        });
+        return this;
+    }
+    parallel(fncs) {
+        this.setStep({ step: fncs, type: StepType.PARALLEL });
+        return this;
+    }
+    loop(options) {
+        this.setStep({
+            step: options.execute,
+            type: StepType.LOOP,
+            key: options.key
+        });
         return this;
     }
     async _exec(fnc) {
@@ -85,7 +122,7 @@ class Runnable {
             keys = [keys];
         const obj = {};
         keys.forEach((key) => {
-            obj[key] = this.state[key];
+            obj[key] = getDeep(this.state, key);
         });
         this.state = obj;
         return this;
@@ -99,7 +136,7 @@ class Runnable {
             throw new Error("Function is required");
         }
         if (typeof key === "string" && fnc) {
-            this.state[key] = await this._exec(fnc);
+            setDeep(this.state, key, await this._exec(fnc));
         }
         else {
             const execs = [];
@@ -113,20 +150,62 @@ class Runnable {
             }
             const values = await Promise.all(execs);
             for (let i = 0, length = keys.length; i < length; i++) {
-                this.state[keys[i]] = values[i];
+                setDeep(this.state, keys[i], values[i]);
             }
         }
         return this;
     }
+    async _switch(cases, options = {}) {
+        const execs = [];
+        for (const caso of cases) {
+            if (await this._exec(caso.if)) {
+                execs.push(this._exec(caso.then));
+                if (!options.processAll)
+                    break;
+            }
+        }
+        const update = (await Promise.all(execs)).reduce((acc, val) => {
+            if (val)
+                return Object.assign(Object.assign({}, acc), val);
+            return acc;
+        }, {});
+        this.state = Object.assign(Object.assign({}, this.state), update);
+        return this;
+    }
+    async _parallel(fncs, options) {
+        const execs = fncs.map((fnc) => this._exec(fnc));
+        const results = await Promise.all(execs);
+        const update = results.reduce((acc, val) => {
+            if (val)
+                return Object.assign(Object.assign({}, acc), val);
+            return acc;
+        }, {});
+        this.state = Object.assign(Object.assign({}, this.state), update);
+        return this;
+    }
+    async _loop(execute, key) {
+        const items = getDeep(this.state, key);
+        if (!Array.isArray(items))
+            throw new Error("Loop key must be an array");
+        for (let i = 0, length = items.length; i < length; i++) {
+            const execs = [];
+            const item = items[i];
+            for (const fnc of execute) {
+                if (fnc instanceof Runnable)
+                    execs.push(fnc.run(Object.assign({ _loopItem: item, _loopIndex: i }, structuredClone(this.state)), { emitter: this.emitter }));
+                else
+                    execs.push(fnc(item, structuredClone(this.state), i));
+            }
+            await Promise.all(execs);
+        }
+        return this;
+    }
     stepsIterator() {
-        let nextIndex = 0;
-        let end = this.steps.length;
-        const step = 1;
         return {
             next: () => {
-                if (nextIndex < end) {
-                    const result = { value: this.steps[nextIndex], done: false };
-                    nextIndex += step;
+                if (this.nextStep < this.steps.length) {
+                    const result = { value: this.steps[this.nextStep], done: false };
+                    this.nextStep += 1;
                     return result;
                 }
                 return { value: null, done: true };
@@ -143,7 +222,7 @@ class Runnable {
     }
     async iterate(iteration) {
         if (!iteration.done) {
-            const { step, type, fnc } = iteration.value;
+            const { step, type, fnc, key, options } = iteration.value;
             switch (type) {
                 case StepType.INIT:
                     await sleep(1);
@@ -156,6 +235,15 @@ class Runnable {
                     break;
                 case StepType.PASSTHROUGH:
                     await this._passThrough(step);
+                    break;
+                case StepType.SWITCH:
+                    await this._switch(step, options);
+                    break;
+                case StepType.PARALLEL:
+                    await this._parallel(step, options);
+                    break;
+                case StepType.LOOP:
+                    await this._loop(step, key);
                     break;
                 case StepType.PICK:
                     await this._pick(step);
@@ -235,7 +323,45 @@ const main = Runnable.init({ a: 1 }, { name: "main:seq" })
     return state;
 })
     .pipe(subSequence)
-    .pick("j")
+    .switchAll([
+    {
+        if: async (state) => state.a === 1,
+        then: async (state) => {
+            state.d = 4;
+            return state;
+        }
+    },
+    {
+        if: async (state) => state.a === 1,
+        then: async (state) => {
+            state.e = 5;
+            return state;
+        }
+    }
+])
+    .parallel([
+    async (state) => {
+        state.f = 6;
+        return state;
+    },
+    async (state) => {
+        state.g = 7;
+        return state;
+    }
+])
+    .assign({ "block.items": [{ id: 1 }, { id: 2 }, { id: 3 }] })
+    .loop({
+    key: "block.items",
+    execute: [
+        async (element, state, index) => {
+            element.title = `title ${index}`;
+        },
+        async (element, state, index) => {
+            element.description = `description ${index}`;
+        }
+    ]
+})
+    //.pick("j")
     .on("check", (msg) => console.log(msg));
 const res = await main.run();
-console.log(res);
+console.log(JSON.stringify(res, null, 2));
