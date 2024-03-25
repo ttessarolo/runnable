@@ -18,9 +18,10 @@ var __asyncGenerator = (this && this.__asyncGenerator) || function (thisArg, _ar
     function reject(value) { resume("throw", value); }
     function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
 };
+var _a, e_1, _b, _c;
 import EventEmitter, { on } from "node:events";
 import { v4 as uuidv4 } from "uuid";
-// import "./types.ts";
+import merge from "lodash.merge";
 const isFunc = (obj) => typeof obj === "function" || obj instanceof Runnable;
 var StepType;
 (function (StepType) {
@@ -101,7 +102,7 @@ class Runnable {
     }
     loop(options) {
         this.setStep({
-            step: options.execute,
+            step: options.chain,
             type: StepType.LOOP,
             key: options.key
         });
@@ -166,7 +167,7 @@ class Runnable {
         }
         const update = (await Promise.all(execs)).reduce((acc, val) => {
             if (val)
-                return Object.assign(Object.assign({}, acc), val);
+                return merge(acc, val);
             return acc;
         }, {});
         this.state = Object.assign(Object.assign({}, this.state), update);
@@ -177,26 +178,24 @@ class Runnable {
         const results = await Promise.all(execs);
         const update = results.reduce((acc, val) => {
             if (val)
-                return Object.assign(Object.assign({}, acc), val);
+                return merge(acc, val);
             return acc;
         }, {});
         this.state = Object.assign(Object.assign({}, this.state), update);
         return this;
     }
-    async _loop(execute, key) {
-        const items = getDeep(this.state, key);
-        if (!Array.isArray(items))
-            throw new Error("Loop key must be an array");
-        for (let i = 0, length = items.length; i < length; i++) {
-            const execs = [];
-            const item = items[i];
-            for (const fnc of execute) {
-                if (fnc instanceof Runnable)
-                    execs.push(fnc.run(Object.assign({ _loopItem: item, _loopIndex: i }, structuredClone(this.state)), { emitter: this.emitter }));
-                else
-                    execs.push(fnc(item, structuredClone(this.state), i));
-            }
-            await Promise.all(execs);
+    async _loop(chain, key) {
+        const innerLoop = Object.keys(this.state).every((k) => ["element", "index"].includes(k));
+        if (innerLoop && !key.startsWith("element."))
+            key = `element.${key}`;
+        const _loop = getDeep(this.state, key);
+        if (!Array.isArray(_loop))
+            throw new Error("Koop key must be an array");
+        for (let i = 0, length = _loop.length; i < length; i++) {
+            const element = _loop[i];
+            const runnable = new Runnable({ element, index: i }, { emitter: this.emitter, name: `${this.name}:loop:${key}:${i}` });
+            const result = await chain(runnable).run();
+            _loop[i] = Object.assign(Object.assign({}, element), result.element);
         }
         return this;
     }
@@ -213,12 +212,13 @@ class Runnable {
         };
     }
     emitStep(type) {
-        this.emit("step", {
+        const event = {
             id: uuidv4(),
             type,
             origin: this.name,
             state: this.state
-        });
+        };
+        this.emit("step", event);
     }
     async iterate(iteration) {
         if (!iteration.done) {
@@ -268,8 +268,8 @@ class Runnable {
         return this.state;
     }
     stream(state_1) {
-        return __asyncGenerator(this, arguments, function* stream_1(state, params = {}) {
-            var _a, e_1, _b, _c;
+        return __asyncGenerator(this, arguments, function* stream_2(state, params = {}) {
+            var _a, e_2, _b, _c;
             this._warm(state, params);
             this.iterate(this.iterator.next());
             try {
@@ -280,12 +280,12 @@ class Runnable {
                     yield yield __await(iteration);
                 }
             }
-            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            catch (e_2_1) { e_2 = { error: e_2_1 }; }
             finally {
                 try {
                     if (!_d && !_a && (_b = _e.return)) yield __await(_b.call(_e));
                 }
-                finally { if (e_1) throw e_1.error; }
+                finally { if (e_2) throw e_2.error; }
             }
         });
     }
@@ -349,19 +349,45 @@ const main = Runnable.init({ a: 1 }, { name: "main:seq" })
         return state;
     }
 ])
-    .assign({ "block.items": [{ id: 1 }, { id: 2 }, { id: 3 }] })
-    .loop({
-    key: "block.items",
-    execute: [
-        async (element, state, index) => {
-            element.title = `title ${index}`;
-        },
-        async (element, state, index) => {
-            element.description = `description ${index}`;
-        }
+    .assign({
+    blocks: [
+        { id: 1, items: [{ id: 1 }, { id: 2 }, { id: 3 }] },
+        { id: 2, items: [{ id: 1 }, { id: 2 }, { id: 3 }] }
     ]
 })
-    //.pick("j")
+    .loop({
+    key: "blocks",
+    chain: (chain) => chain.loop({
+        key: "items",
+        chain: (chain) => chain.parallel([
+            async (state) => {
+                state.element.title = "title";
+                return state;
+            },
+            async (state) => {
+                state.element.description = "description";
+                return state;
+            }
+        ])
+    })
+})
+    .pick("j")
     .on("check", (msg) => console.log(msg));
-const res = await main.run();
-console.log(JSON.stringify(res, null, 2));
+// const res = await main.run();
+// console.log(JSON.stringify(res, null, 2));
+const stream = main.stream();
+try {
+    for (var _d = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = await stream_1.next(), _a = stream_1_1.done, !_a; _d = true) {
+        _c = stream_1_1.value;
+        _d = false;
+        const state = _c;
+        console.log(state.origin, state.type);
+    }
+}
+catch (e_1_1) { e_1 = { error: e_1_1 }; }
+finally {
+    try {
+        if (!_d && !_a && (_b = stream_1.return)) await _b.call(stream_1);
+    }
+    finally { if (e_1) throw e_1.error; }
+}

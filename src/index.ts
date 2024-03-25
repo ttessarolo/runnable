@@ -1,8 +1,7 @@
 import { exec } from "node:child_process";
 import EventEmitter, { on } from "node:events";
 import { v4 as uuidv4 } from "uuid";
-
-// import "./types.ts";
+import merge from "lodash.merge";
 
 const isFunc = (obj: any) =>
   typeof obj === "function" || obj instanceof Runnable;
@@ -35,6 +34,13 @@ type Step = {
   options?: object;
 };
 
+type StepEvent = {
+  id: string;
+  type: string;
+  origin: string;
+  state: object;
+};
+
 type IteratorFunction = {
   next: () => { value: Step; done: boolean } | { value: null; done: true };
 };
@@ -60,6 +66,7 @@ function setDeep(obj: object, path: string, value: any) {
   }, obj);
   lastObj[last] = value;
 }
+
 class Runnable {
   name?: string;
   state: object;
@@ -128,9 +135,9 @@ class Runnable {
     return this;
   }
 
-  loop(options: { key: string; execute: (Function | Runnable)[] }): Runnable {
+  loop(options: { key: string; chain: Function }): Runnable {
     this.setStep({
-      step: options.execute,
+      step: options.chain,
       type: StepType.LOOP,
       key: options.key
     });
@@ -209,7 +216,7 @@ class Runnable {
 
     const update = (await Promise.all(execs)).reduce(
       (acc: object, val: object) => {
-        if (val) return { ...acc, ...val };
+        if (val) return merge(acc, val);
         return acc;
       },
       {}
@@ -227,7 +234,7 @@ class Runnable {
     const execs = fncs.map((fnc) => this._exec(fnc));
     const results = await Promise.all(execs);
     const update = results.reduce((acc: object, val: object) => {
-      if (val) return { ...acc, ...val };
+      if (val) return merge(acc, val);
       return acc;
     }, {});
     this.state = { ...this.state, ...update };
@@ -235,29 +242,23 @@ class Runnable {
     return this;
   }
 
-  private async _loop(execute: (Function | Runnable)[], key: string) {
-    const items = getDeep(this.state, key);
-    if (!Array.isArray(items)) throw new Error("Loop key must be an array");
-    for (let i = 0, length = items.length; i < length; i++) {
-      const execs = [];
-      const item = items[i];
-      for (const fnc of execute) {
-        if (fnc instanceof Runnable)
-          execs.push(
-            fnc.run(
-              {
-                _loopItem: item,
-                _loopIndex: i,
-                ...structuredClone(this.state)
-              },
-              { emitter: this.emitter }
-            )
-          );
-        else execs.push(fnc(item, structuredClone(this.state), i));
-      }
-      await Promise.all(execs);
-    }
+  private async _loop(chain: Function, key: string): Promise<Runnable> {
+    const innerLoop = Object.keys(this.state).every((k) =>
+      ["element", "index"].includes(k)
+    );
+    if (innerLoop && !key.startsWith("element.")) key = `element.${key}`;
 
+    const _loop = getDeep(this.state, key);
+    if (!Array.isArray(_loop)) throw new Error("Koop key must be an array");
+    for (let i = 0, length = _loop.length; i < length; i++) {
+      const element = _loop[i];
+      const runnable = new Runnable(
+        { element, index: i },
+        { emitter: this.emitter, name: `${this.name}:loop:${key}:${i}` }
+      );
+      const result = await chain(runnable).run();
+      _loop[i] = { ...element, ...result.element };
+    }
     return this;
   }
 
@@ -274,13 +275,15 @@ class Runnable {
     };
   }
 
-  private emitStep(type: string) {
-    this.emit("step", {
+  private emitStep(type: string): void {
+    const event: StepEvent = {
       id: uuidv4(),
       type,
       origin: this.name,
       state: this.state
-    });
+    };
+
+    this.emit("step", event);
   }
 
   async iterate(iteration: any) {
@@ -334,7 +337,10 @@ class Runnable {
     return this.state;
   }
 
-  async *stream(state?: object, params: RunnableParams = {}): AsyncGenerator {
+  async *stream(
+    state?: object,
+    params: RunnableParams = {}
+  ): AsyncGenerator<StepEvent> {
     this._warm(state, params);
     this.iterate(this.iterator.next());
 
@@ -406,28 +412,40 @@ const main = Runnable.init({ a: 1 }, { name: "main:seq" })
       return state;
     }
   ])
-  .assign({ "block.items": [{ id: 1 }, { id: 2 }, { id: 3 }] })
-  .loop({
-    key: "block.items",
-    execute: [
-      async (element: any, state: any, index: number) => {
-        element.title = `title ${index}`;
-      },
-      async (element: any, state: any, index: number) => {
-        element.description = `description ${index}`;
-      }
+  .assign({
+    blocks: [
+      { id: 1, items: [{ id: 1 }, { id: 2 }, { id: 3 }] },
+      { id: 2, items: [{ id: 1 }, { id: 2 }, { id: 3 }] }
     ]
   })
-  //.pick("j")
+  .loop({
+    key: "blocks",
+    chain: (chain: Runnable) =>
+      chain.loop({
+        key: "items",
+        chain: (chain: Runnable) =>
+          chain.parallel([
+            async (state: any) => {
+              state.element.title = "title";
+              return state;
+            },
+            async (state: any) => {
+              state.element.description = "description";
+              return state;
+            }
+          ])
+      })
+  })
+  .pick("j")
   .on("check", (msg: string) => console.log(msg));
 
-const res = await main.run();
-console.log(JSON.stringify(res, null, 2));
+// const res = await main.run();
+// console.log(JSON.stringify(res, null, 2));
 
-// const stream = main.stream();
+const stream = main.stream();
 
-// for await (const state of stream) {
-//   console.log(state);
-// }
+for await (const state of stream) {
+  console.log(state.origin, state.type);
+}
 
 export {};
