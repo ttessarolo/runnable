@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.2.0%0Dv1.3.0) (2024-03-26)
+
+
+### Features
+
+* go API ([a9623f5](https://github.com/ttessarolo/runnable/commits/a9623f5657b60d52e92e8f66ff9c2883c72ca56d))
+
 ## [1.2.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.1.0%0Dv1.2.0) (2024-03-25)
 
 
