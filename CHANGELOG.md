@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.3.0%0Dv1.4.0) (2024-03-26)
+
+
+### Features
+
+* milestone API ([bdf9328](https://github.com/ttessarolo/runnable/commits/bdf9328ea2842790afa49b39b3df7a06b5ef6007))
+
 ## [1.3.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.2.0%0Dv1.3.0) (2024-03-26)
 
 
