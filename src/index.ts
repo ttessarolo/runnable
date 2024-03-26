@@ -1,4 +1,3 @@
-import { exec } from "node:child_process";
 import EventEmitter, { on } from "node:events";
 import { v4 as uuidv4 } from "uuid";
 import merge from "lodash.merge";
@@ -12,9 +11,10 @@ enum StepType {
   ASSIGN = "assign",
   PASSTHROUGH = "passThrough",
   PICK = "pick",
-  SWITCH = "switch",
+  BRANCH = "branch",
   PARALLEL = "parallel",
-  LOOP = "loop"
+  LOOP = "loop",
+  GOTO = "goto"
 }
 
 type SwitchCase = {
@@ -22,11 +22,14 @@ type SwitchCase = {
   then: Function | Runnable;
 };
 
-type SwitchOptions = {
+type StepOptions = {
+  name?: string;
   processAll?: boolean;
 };
 
+type Roote = { to: string; if?: Function };
 type Step = {
+  name?: string;
   step?: any;
   type: StepType;
   fnc?: Function;
@@ -36,6 +39,7 @@ type Step = {
 
 type StepEvent = {
   id: string;
+  name?: string;
   type: string;
   origin: string;
   state: object;
@@ -48,6 +52,7 @@ type IteratorFunction = {
 type RunnableParams = {
   name?: string;
   emitter?: EventEmitter;
+  maxIterations?: number;
 };
 
 const sleep = (ms: number = 1000) =>
@@ -73,12 +78,16 @@ class Runnable {
   emitter: EventEmitter;
   steps: Step[] = [];
   iterator: IteratorFunction;
+  maxIterations: number;
   private nextStep: number = 0;
+  private nodes: Set<string> = new Set();
+  private iteractionCount: number = 0;
 
   constructor(state: object, params: RunnableParams = {}) {
     this.name = params.name;
     this.state = state;
     this.emitter = params.emitter ?? new EventEmitter();
+    this.maxIterations = params.maxIterations ?? 25;
 
     return this;
   }
@@ -94,52 +103,80 @@ class Runnable {
 
   setStep(step: Step) {
     this.steps.push(step);
+    if (step.name) this.nodes.add(step.name);
   }
 
-  pipe(fnc: Function | Runnable): Runnable {
-    this.setStep({ step: fnc, type: StepType.PIPE });
+  pipe(fnc: Function | Runnable, options?: StepOptions): Runnable {
+    this.setStep({ step: fnc, type: StepType.PIPE, name: options?.name });
     return this;
   }
 
-  assign(key: string | object, fnc?: Function): Runnable {
-    this.setStep({ step: key, type: StepType.ASSIGN, fnc: fnc });
-    return this;
-  }
-
-  passThrough(fnc: Function): Runnable {
-    this.setStep({ step: fnc, type: StepType.PASSTHROUGH });
-    return this;
-  }
-
-  pick(keys: string | string[]): Runnable {
-    this.setStep({ step: keys, type: StepType.PICK });
-    return this;
-  }
-
-  switch(fnc: SwitchCase[], options: any = {}): Runnable {
-    this.setStep({ step: fnc, type: StepType.SWITCH, options });
-    return this;
-  }
-
-  switchAll(fnc: SwitchCase[], options: any = {}): Runnable {
+  assign(
+    key: string | object,
+    fnc?: Function,
+    options?: StepOptions
+  ): Runnable {
     this.setStep({
-      step: fnc,
-      type: StepType.SWITCH,
-      options: { ...options, processAll: true }
+      step: key,
+      type: StepType.ASSIGN,
+      fnc: fnc,
+      name: options?.name
     });
     return this;
   }
 
-  parallel(fncs: (Function | Runnable)[]): Runnable {
-    this.setStep({ step: fncs, type: StepType.PARALLEL });
+  passThrough(fnc: Function, options?: StepOptions): Runnable {
+    this.setStep({
+      step: fnc,
+      type: StepType.PASSTHROUGH,
+      name: options?.name
+    });
     return this;
   }
 
-  loop(options: { key: string; chain: Function }): Runnable {
+  pick(keys: string | string[], options?: StepOptions): Runnable {
+    this.setStep({ step: keys, type: StepType.PICK, name: options?.name });
+    return this;
+  }
+
+  branch(fnc: SwitchCase[], options?: StepOptions): Runnable {
+    this.setStep({ step: fnc, type: StepType.BRANCH, name: options?.name });
+    return this;
+  }
+
+  branchAll(fnc: SwitchCase[], options?: StepOptions): Runnable {
     this.setStep({
-      step: options.chain,
+      step: fnc,
+      type: StepType.BRANCH,
+      options: { processAll: true },
+      name: options?.name
+    });
+    return this;
+  }
+
+  parallel(fncs: (Function | Runnable)[], options?: StepOptions): Runnable {
+    this.setStep({ step: fncs, type: StepType.PARALLEL, name: options?.name });
+    return this;
+  }
+
+  loop(
+    params: { key: string; chain: Function },
+    options?: StepOptions
+  ): Runnable {
+    this.setStep({
+      step: params.chain,
       type: StepType.LOOP,
-      key: options.key
+      key: params.key,
+      name: options?.name
+    });
+    return this;
+  }
+
+  go(rootes: Roote[] | Roote, options?: StepOptions): Runnable {
+    this.setStep({
+      step: rootes,
+      type: StepType.GOTO,
+      name: options?.name
     });
     return this;
   }
@@ -201,9 +238,9 @@ class Runnable {
     return this;
   }
 
-  private async _switch(
+  private async _branch(
     cases: SwitchCase[],
-    options: SwitchOptions = {}
+    options: StepOptions = {}
   ): Promise<Runnable> {
     const execs: Promise<object>[] = [];
 
@@ -249,7 +286,7 @@ class Runnable {
     if (innerLoop && !key.startsWith("element.")) key = `element.${key}`;
 
     const _loop = getDeep(this.state, key);
-    if (!Array.isArray(_loop)) throw new Error("Koop key must be an array");
+    if (!Array.isArray(_loop)) throw new Error("Loop key must be an array");
     for (let i = 0, length = _loop.length; i < length; i++) {
       const element = _loop[i];
       const runnable = new Runnable(
@@ -259,6 +296,28 @@ class Runnable {
       const result = await chain(runnable).run();
       _loop[i] = { ...element, ...result.element };
     }
+    return this;
+  }
+
+  private async _go(rootes: Roote[] | Roote): Promise<Runnable> {
+    const roots = Array.isArray(rootes) ? rootes : [rootes];
+    for (const root of roots) {
+      const { to, if: condition } = root;
+
+      if (!this.nodes.has(to)) throw new Error(`GoTo: Node ${to} not found`);
+      if (this.iteractionCount >= this.maxIterations)
+        throw new Error(`Max iterations reached`);
+
+      const goto = condition ? await this._exec(condition) : true;
+
+      if (goto) {
+        const index = this.steps.findIndex((step) => step.name === to);
+        this.nextStep = index;
+        this.iteractionCount += 1;
+        break;
+      }
+    }
+
     return this;
   }
 
@@ -275,9 +334,10 @@ class Runnable {
     };
   }
 
-  private emitStep(type: string): void {
+  private emitStep(type: string, name?: string): void {
     const event: StepEvent = {
       id: uuidv4(),
+      name: name,
       type,
       origin: this.name,
       state: this.state
@@ -288,7 +348,7 @@ class Runnable {
 
   async iterate(iteration: any) {
     if (!iteration.done) {
-      const { step, type, fnc, key, options } = iteration.value;
+      const { step, type, name, fnc, key, options } = iteration.value;
       switch (type) {
         case StepType.INIT:
           await sleep(1);
@@ -302,8 +362,8 @@ class Runnable {
         case StepType.PASSTHROUGH:
           await this._passThrough(step);
           break;
-        case StepType.SWITCH:
-          await this._switch(step, options);
+        case StepType.BRANCH:
+          await this._branch(step, options);
           break;
         case StepType.PARALLEL:
           await this._parallel(step, options);
@@ -314,9 +374,15 @@ class Runnable {
         case StepType.PICK:
           await this._pick(step);
           break;
+        case StepType.GOTO:
+          await this._go(step);
+          break;
+        default:
+          throw new Error("Invalid step type");
+          break;
       }
 
-      this.emitStep(type);
+      this.emitStep(type, name);
 
       await this.iterate(this.iterator.next());
     }
@@ -376,23 +442,38 @@ const subSequence = Runnable.from(
   { name: "sub:seq" }
 );
 
-const main = Runnable.init({ a: 1 }, { name: "main:seq" })
+const subSubSequence = Runnable.from(
+  [
+    { z: async () => "Z" },
+    {
+      y: async (state: any) => "Y"
+    }
+  ],
+  { name: "sub:sub:seq" }
+);
+
+const main = Runnable.init({}, { name: "main:seq" })
   .assign({ b: async () => await 2 })
+  .pipe(
+    async (state: any) => {
+      state.a = state.a + 1;
+      return state;
+    },
+    { name: "increment-a" }
+  )
   .passThrough((state: any, emitter: EventEmitter) => {
     if (state.a === 1) emitter.emit("check", "a is ok");
   })
   .pipe(async (state: any) => {
     state.c = 3;
+
     return state;
   })
   .pipe(subSequence)
-  .switchAll([
+  .branch([
     {
       if: async (state: any) => state.a === 1,
-      then: async (state: any) => {
-        state.d = 4;
-        return state;
-      }
+      then: subSubSequence
     },
     {
       if: async (state: any) => state.a === 1,
@@ -411,6 +492,10 @@ const main = Runnable.init({ a: 1 }, { name: "main:seq" })
       state.g = 7;
       return state;
     }
+  ])
+  .go([
+    { to: "increment-a", if: async (state: any) => state.a < 4 },
+    { to: "increment-a", if: async (state: any) => state.a < 4 }
   ])
   .assign({
     blocks: [
@@ -439,13 +524,13 @@ const main = Runnable.init({ a: 1 }, { name: "main:seq" })
   .pick("j")
   .on("check", (msg: string) => console.log(msg));
 
-// const res = await main.run();
+// const res = await main.run({ a: 0 });
 // console.log(JSON.stringify(res, null, 2));
 
-const stream = main.stream();
+const stream = main.stream({ a: 0 });
 
 for await (const state of stream) {
-  console.log(state.origin, state.type);
+  console.log(state.origin, state.type, state.name ?? "");
 }
 
 export {};

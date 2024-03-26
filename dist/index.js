@@ -19,6 +19,7 @@ var __asyncGenerator = (this && this.__asyncGenerator) || function (thisArg, _ar
     function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
 };
 var _a, e_1, _b, _c;
+var _d;
 import EventEmitter, { on } from "node:events";
 import { v4 as uuidv4 } from "uuid";
 import merge from "lodash.merge";
@@ -30,9 +31,10 @@ var StepType;
     StepType["ASSIGN"] = "assign";
     StepType["PASSTHROUGH"] = "passThrough";
     StepType["PICK"] = "pick";
-    StepType["SWITCH"] = "switch";
+    StepType["BRANCH"] = "branch";
     StepType["PARALLEL"] = "parallel";
     StepType["LOOP"] = "loop";
+    StepType["GOTO"] = "goto";
 })(StepType || (StepType = {}));
 const sleep = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
 function getDeep(obj, path) {
@@ -50,12 +52,15 @@ function setDeep(obj, path, value) {
 }
 class Runnable {
     constructor(state, params = {}) {
-        var _a;
+        var _a, _b;
         this.steps = [];
         this.nextStep = 0;
+        this.nodes = new Set();
+        this.iteractionCount = 0;
         this.name = params.name;
         this.state = state;
         this.emitter = (_a = params.emitter) !== null && _a !== void 0 ? _a : new EventEmitter();
+        this.maxIterations = (_b = params.maxIterations) !== null && _b !== void 0 ? _b : 25;
         return this;
     }
     on(event, fnc) {
@@ -67,44 +72,65 @@ class Runnable {
     }
     setStep(step) {
         this.steps.push(step);
+        if (step.name)
+            this.nodes.add(step.name);
     }
-    pipe(fnc) {
-        this.setStep({ step: fnc, type: StepType.PIPE });
+    pipe(fnc, options) {
+        this.setStep({ step: fnc, type: StepType.PIPE, name: options === null || options === void 0 ? void 0 : options.name });
         return this;
     }
-    assign(key, fnc) {
-        this.setStep({ step: key, type: StepType.ASSIGN, fnc: fnc });
-        return this;
-    }
-    passThrough(fnc) {
-        this.setStep({ step: fnc, type: StepType.PASSTHROUGH });
-        return this;
-    }
-    pick(keys) {
-        this.setStep({ step: keys, type: StepType.PICK });
-        return this;
-    }
-    switch(fnc, options = {}) {
-        this.setStep({ step: fnc, type: StepType.SWITCH, options });
-        return this;
-    }
-    switchAll(fnc, options = {}) {
+    assign(key, fnc, options) {
         this.setStep({
-            step: fnc,
-            type: StepType.SWITCH,
-            options: Object.assign(Object.assign({}, options), { processAll: true })
+            step: key,
+            type: StepType.ASSIGN,
+            fnc: fnc,
+            name: options === null || options === void 0 ? void 0 : options.name
         });
         return this;
     }
-    parallel(fncs) {
-        this.setStep({ step: fncs, type: StepType.PARALLEL });
+    passThrough(fnc, options) {
+        this.setStep({
+            step: fnc,
+            type: StepType.PASSTHROUGH,
+            name: options === null || options === void 0 ? void 0 : options.name
+        });
         return this;
     }
-    loop(options) {
+    pick(keys, options) {
+        this.setStep({ step: keys, type: StepType.PICK, name: options === null || options === void 0 ? void 0 : options.name });
+        return this;
+    }
+    branch(fnc, options) {
+        this.setStep({ step: fnc, type: StepType.BRANCH, name: options === null || options === void 0 ? void 0 : options.name });
+        return this;
+    }
+    branchAll(fnc, options) {
         this.setStep({
-            step: options.chain,
+            step: fnc,
+            type: StepType.BRANCH,
+            options: { processAll: true },
+            name: options === null || options === void 0 ? void 0 : options.name
+        });
+        return this;
+    }
+    parallel(fncs, options) {
+        this.setStep({ step: fncs, type: StepType.PARALLEL, name: options === null || options === void 0 ? void 0 : options.name });
+        return this;
+    }
+    loop(params, options) {
+        this.setStep({
+            step: params.chain,
             type: StepType.LOOP,
-            key: options.key
+            key: params.key,
+            name: options === null || options === void 0 ? void 0 : options.name
+        });
+        return this;
+    }
+    go(rootes, options) {
+        this.setStep({
+            step: rootes,
+            type: StepType.GOTO,
+            name: options === null || options === void 0 ? void 0 : options.name
         });
         return this;
     }
@@ -156,7 +182,7 @@ class Runnable {
         }
         return this;
     }
-    async _switch(cases, options = {}) {
+    async _branch(cases, options = {}) {
         const execs = [];
         for (const caso of cases) {
             if (await this._exec(caso.if)) {
@@ -190,12 +216,30 @@ class Runnable {
             key = `element.${key}`;
         const _loop = getDeep(this.state, key);
         if (!Array.isArray(_loop))
-            throw new Error("Koop key must be an array");
+            throw new Error("Loop key must be an array");
         for (let i = 0, length = _loop.length; i < length; i++) {
             const element = _loop[i];
             const runnable = new Runnable({ element, index: i }, { emitter: this.emitter, name: `${this.name}:loop:${key}:${i}` });
             const result = await chain(runnable).run();
             _loop[i] = Object.assign(Object.assign({}, element), result.element);
+        }
+        return this;
+    }
+    async _go(rootes) {
+        const roots = Array.isArray(rootes) ? rootes : [rootes];
+        for (const root of roots) {
+            const { to, if: condition } = root;
+            if (!this.nodes.has(to))
+                throw new Error(`GoTo: Node ${to} not found`);
+            if (this.iteractionCount >= this.maxIterations)
+                throw new Error(`Max iterations reached`);
+            const goto = condition ? await this._exec(condition) : true;
+            if (goto) {
+                const index = this.steps.findIndex((step) => step.name === to);
+                this.nextStep = index;
+                this.iteractionCount += 1;
+                break;
+            }
         }
         return this;
     }
@@ -211,9 +255,10 @@ class Runnable {
             }
         };
     }
-    emitStep(type) {
+    emitStep(type, name) {
         const event = {
             id: uuidv4(),
+            name: name,
             type,
             origin: this.name,
             state: this.state
@@ -222,7 +267,7 @@ class Runnable {
     }
     async iterate(iteration) {
         if (!iteration.done) {
-            const { step, type, fnc, key, options } = iteration.value;
+            const { step, type, name, fnc, key, options } = iteration.value;
             switch (type) {
                 case StepType.INIT:
                     await sleep(1);
@@ -236,8 +281,8 @@ class Runnable {
                 case StepType.PASSTHROUGH:
                     await this._passThrough(step);
                     break;
-                case StepType.SWITCH:
-                    await this._switch(step, options);
+                case StepType.BRANCH:
+                    await this._branch(step, options);
                     break;
                 case StepType.PARALLEL:
                     await this._parallel(step, options);
@@ -248,8 +293,14 @@ class Runnable {
                 case StepType.PICK:
                     await this._pick(step);
                     break;
+                case StepType.GOTO:
+                    await this._go(step);
+                    break;
+                default:
+                    throw new Error("Invalid step type");
+                    break;
             }
-            this.emitStep(type);
+            this.emitStep(type, name);
             await this.iterate(this.iterator.next());
         }
     }
@@ -312,8 +363,18 @@ const subSequence = Runnable.from([
         return state;
     }
 ], { name: "sub:seq" });
-const main = Runnable.init({ a: 1 }, { name: "main:seq" })
+const subSubSequence = Runnable.from([
+    { z: async () => "Z" },
+    {
+        y: async (state) => "Y"
+    }
+], { name: "sub:sub:seq" });
+const main = Runnable.init({}, { name: "main:seq" })
     .assign({ b: async () => await 2 })
+    .pipe(async (state) => {
+    state.a = state.a + 1;
+    return state;
+}, { name: "increment-a" })
     .passThrough((state, emitter) => {
     if (state.a === 1)
         emitter.emit("check", "a is ok");
@@ -323,13 +384,10 @@ const main = Runnable.init({ a: 1 }, { name: "main:seq" })
     return state;
 })
     .pipe(subSequence)
-    .switchAll([
+    .branch([
     {
         if: async (state) => state.a === 1,
-        then: async (state) => {
-            state.d = 4;
-            return state;
-        }
+        then: subSubSequence
     },
     {
         if: async (state) => state.a === 1,
@@ -348,6 +406,10 @@ const main = Runnable.init({ a: 1 }, { name: "main:seq" })
         state.g = 7;
         return state;
     }
+])
+    .go([
+    { to: "increment-a", if: async (state) => state.a < 4 },
+    { to: "increment-a", if: async (state) => state.a < 4 }
 ])
     .assign({
     blocks: [
@@ -373,21 +435,21 @@ const main = Runnable.init({ a: 1 }, { name: "main:seq" })
 })
     .pick("j")
     .on("check", (msg) => console.log(msg));
-// const res = await main.run();
+// const res = await main.run({ a: 0 });
 // console.log(JSON.stringify(res, null, 2));
-const stream = main.stream();
+const stream = main.stream({ a: 0 });
 try {
-    for (var _d = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = await stream_1.next(), _a = stream_1_1.done, !_a; _d = true) {
+    for (var _e = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = await stream_1.next(), _a = stream_1_1.done, !_a; _e = true) {
         _c = stream_1_1.value;
-        _d = false;
+        _e = false;
         const state = _c;
-        console.log(state.origin, state.type);
+        console.log(state.origin, state.type, (_d = state.name) !== null && _d !== void 0 ? _d : "");
     }
 }
 catch (e_1_1) { e_1 = { error: e_1_1 }; }
 finally {
     try {
-        if (!_d && !_a && (_b = stream_1.return)) await _b.call(stream_1);
+        if (!_e && !_a && (_b = stream_1.return)) await _b.call(stream_1);
     }
     finally { if (e_1) throw e_1.error; }
 }
