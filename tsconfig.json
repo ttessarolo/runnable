@@ -1,11 +1,16 @@
 {
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
-    "module": "esnext",
-    "moduleResolution": "node",
+    "target": "ES2021",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "outDir": "dist",
     "rootDir": "src",
-    "target": "es2017"
+    "esModuleInterop": true,
+    "declaration": true,
+    "strictPropertyInitialization": false
+    //"allowJs": true
+    // "strict": true
   },
   "exclude": ["dist", "node_modules"]
 }

@@ -1,84 +1,26 @@
 import EventEmitter, { on } from "node:events";
 import { v4 as uuidv4 } from "uuid";
 import merge from "lodash.merge";
+import get from "lodash.get";
+import set from "lodash.set";
+import { isFunc, sleep } from "./utils.js";
+import {
+  StepType,
+  SwitchCase,
+  StepOptions,
+  Roote,
+  Step,
+  StepEvent,
+  IteratorFunction,
+  RunnableParams
+} from "./types.js";
 
-const isFunc = (obj: any) =>
-  typeof obj === "function" || obj instanceof Runnable;
-
-enum StepType {
-  INIT = "init",
-  PIPE = "pipe",
-  ASSIGN = "assign",
-  PASSTHROUGH = "passThrough",
-  PICK = "pick",
-  BRANCH = "branch",
-  PARALLEL = "parallel",
-  LOOP = "loop",
-  GOTO = "goto",
-  MILESTONE = "milestone"
-}
-
-type SwitchCase = {
-  if: Function;
-  then: Function | Runnable;
-};
-
-type StepOptions = {
-  name?: string;
-  processAll?: boolean;
-};
-
-type Roote = { to: string; if?: Function };
-type Step = {
-  name?: string;
-  step?: any;
-  type: StepType;
-  fnc?: Function;
-  key?: string;
-  options?: object;
-};
-
-type StepEvent = {
-  id: string;
-  name?: string;
-  type: string;
-  origin: string;
-  state: object;
-};
-
-type IteratorFunction = {
-  next: () => { value: Step; done: boolean } | { value: null; done: true };
-};
-
-type RunnableParams = {
-  name?: string;
-  emitter?: EventEmitter;
-  maxIterations?: number;
-};
-
-const sleep = (ms: number = 1000) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-function getDeep(obj: object, path: string) {
-  return path.split(".").reduce((acc, key) => acc[key], obj);
-}
-
-function setDeep(obj: object, path: string, value: any) {
-  const keys = path.split(".");
-  const last = keys.pop();
-  const lastObj = keys.reduce((acc, key) => {
-    if (!acc[key]) acc[key] = {};
-    return acc[key];
-  }, obj);
-  lastObj[last] = value;
-}
-
-class Runnable {
+export default class Runnable {
   name?: string;
   state: object;
   emitter: EventEmitter;
   steps: Step[] = [];
-  iterator: IteratorFunction;
+  iterator: IteratorFunction | undefined;
   maxIterations: number;
   private nextStep: number = 0;
   private nodes: Set<string> = new Set();
@@ -186,14 +128,14 @@ class Runnable {
     return this;
   }
 
-  private async _exec(fnc: any) {
+  private async _exec(fnc: Function | Runnable): Promise<object> {
     const stato = structuredClone(this.state);
     return fnc instanceof Runnable
       ? await fnc.run(stato, { emitter: this.emitter })
       : await fnc(stato, this.emitter);
   }
 
-  private async _pipe(fnc: any): Promise<Runnable> {
+  private async _pipe(fnc: Function | Runnable): Promise<Runnable> {
     this.state = { ...this.state, ...(await this._exec(fnc)) };
 
     return this;
@@ -203,7 +145,7 @@ class Runnable {
     if (!Array.isArray(keys)) keys = [keys];
     const obj = {};
     keys.forEach((key) => {
-      obj[key] = getDeep(this.state, key);
+      obj[key] = get(this.state, key);
     });
     this.state = obj;
 
@@ -224,7 +166,7 @@ class Runnable {
     }
 
     if (typeof key === "string" && fnc) {
-      setDeep(this.state, key, await this._exec(fnc));
+      set(this.state, key, await this._exec(fnc));
     } else {
       const execs: Promise<any>[] = [];
       const keys: any[] = [];
@@ -236,7 +178,7 @@ class Runnable {
       const values = await Promise.all(execs);
 
       for (let i = 0, length = keys.length; i < length; i++) {
-        setDeep(this.state, keys[i], values[i]);
+        set(this.state, keys[i], values[i]);
       }
     }
 
@@ -290,7 +232,7 @@ class Runnable {
     );
     if (innerLoop && !key.startsWith("element.")) key = `element.${key}`;
 
-    const _loop = getDeep(this.state, key);
+    const _loop = get(this.state, key);
     if (!Array.isArray(_loop)) throw new Error("Loop key must be an array");
     for (let i = 0, length = _loop.length; i < length; i++) {
       const element = _loop[i];
@@ -539,5 +481,3 @@ const stream = main.stream({ a: 0 });
 for await (const state of stream) {
   console.log(state.origin, state.type, state.name ?? "");
 }
-
-export {};

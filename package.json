@@ -1,8 +1,9 @@
 {
-  "name": "runnable",
+  "name": "runnify",
   "version": "1.4.0",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/types.d.ts",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -15,7 +16,11 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/lodash.get": "^4.4.9",
+    "@types/lodash.merge": "^4.6.9",
+    "@types/lodash.set": "^4.3.9",
     "@types/node": "^20.11.30",
+    "@types/uuid": "^9.0.8",
     "commitizen": "^4.3.0",
     "cz-conventional-changelog": "^3.3.0",
     "standard-version": "^9.5.0"
@@ -26,7 +31,9 @@
     }
   },
   "dependencies": {
+    "lodash.get": "^4.4.2",
     "lodash.merge": "^4.6.2",
+    "lodash.set": "^4.3.2",
     "uuid": "^9.0.1"
   }
 }
