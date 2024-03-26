@@ -14,7 +14,8 @@ enum StepType {
   BRANCH = "branch",
   PARALLEL = "parallel",
   LOOP = "loop",
-  GOTO = "goto"
+  GOTO = "goto",
+  MILESTONE = "milestone"
 }
 
 type SwitchCase = {
@@ -106,6 +107,10 @@ class Runnable {
     if (step.name) this.nodes.add(step.name);
   }
 
+  milestone(name: string): Runnable {
+    this.setStep({ type: StepType.MILESTONE, name });
+    return this;
+  }
   pipe(fnc: Function | Runnable, options?: StepOptions): Runnable {
     this.setStep({ step: fnc, type: StepType.PIPE, name: options?.name });
     return this;
@@ -351,6 +356,7 @@ class Runnable {
       const { step, type, name, fnc, key, options } = iteration.value;
       switch (type) {
         case StepType.INIT:
+        case StepType.MILESTONE:
           await sleep(1);
           break;
         case StepType.PIPE:
@@ -469,6 +475,7 @@ const main = Runnable.init({}, { name: "main:seq" })
 
     return state;
   })
+  .milestone("STATE:UPDATED:ANALYZED")
   .pipe(subSequence)
   .branch([
     {
@@ -495,7 +502,7 @@ const main = Runnable.init({}, { name: "main:seq" })
   ])
   .go([
     { to: "increment-a", if: async (state: any) => state.a < 4 },
-    { to: "increment-a", if: async (state: any) => state.a < 4 }
+    { to: "STATE:UPDATED:ANALYZED", if: async (state: any) => state.a > 9 }
   ])
   .assign({
     blocks: [

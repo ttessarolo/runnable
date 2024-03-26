@@ -35,6 +35,7 @@ var StepType;
     StepType["PARALLEL"] = "parallel";
     StepType["LOOP"] = "loop";
     StepType["GOTO"] = "goto";
+    StepType["MILESTONE"] = "milestone";
 })(StepType || (StepType = {}));
 const sleep = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
 function getDeep(obj, path) {
@@ -74,6 +75,10 @@ class Runnable {
         this.steps.push(step);
         if (step.name)
             this.nodes.add(step.name);
+    }
+    milestone(name) {
+        this.setStep({ type: StepType.MILESTONE, name });
+        return this;
     }
     pipe(fnc, options) {
         this.setStep({ step: fnc, type: StepType.PIPE, name: options === null || options === void 0 ? void 0 : options.name });
@@ -270,6 +275,7 @@ class Runnable {
             const { step, type, name, fnc, key, options } = iteration.value;
             switch (type) {
                 case StepType.INIT:
+                case StepType.MILESTONE:
                     await sleep(1);
                     break;
                 case StepType.PIPE:
@@ -383,6 +389,7 @@ const main = Runnable.init({}, { name: "main:seq" })
     state.c = 3;
     return state;
 })
+    .milestone("STATE:UPDATED:ANALYZED")
     .pipe(subSequence)
     .branch([
     {
@@ -409,7 +416,7 @@ const main = Runnable.init({}, { name: "main:seq" })
 ])
     .go([
     { to: "increment-a", if: async (state) => state.a < 4 },
-    { to: "increment-a", if: async (state) => state.a < 4 }
+    { to: "STATE:UPDATED:ANALYZED", if: async (state) => state.a > 9 }
 ])
     .assign({
     blocks: [
