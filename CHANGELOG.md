@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.4.1%0Dv1.5.0) (2024-03-27)
+
+
+### Features
+
+* clone object on run/stream to allow parallel ([dc28f69](https://github.com/ttessarolo/runnable/commits/dc28f6998da8989e3995ed6fb03dd9e2e8ad28ba))
+
 ### [1.4.1](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.4.0%0Dv1.4.1) (2024-03-26)
 
 
