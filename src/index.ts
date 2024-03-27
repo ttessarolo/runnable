@@ -11,7 +11,9 @@ import {
   Roote,
   Step,
   StepEvent,
+  Iteration,
   IteratorFunction,
+  EventType,
   RunnableParams
 } from "./types.js";
 
@@ -23,20 +25,37 @@ export default class Runnable {
   iterator: IteratorFunction | undefined;
   maxIterations: number;
   private nextStep: number = 0;
-  private nodes: Set<string> = new Set();
+  private nodes: Map<string, number>;
   private iteractionCount: number = 0;
+  private subEvents: EventType[];
 
-  constructor(state: object, params: RunnableParams = {}) {
+  private constructor(state: object, params: RunnableParams = {}) {
     this.name = params.name;
     this.state = state;
     this.emitter = params.emitter ?? new EventEmitter();
     this.maxIterations = params.maxIterations ?? 25;
+    this.nodes = params.nodes ?? new Map();
+    this.steps = params.steps ?? [];
+    this.subEvents = params.subEvents ?? [];
 
+    this.subEvents.forEach((event: EventType) =>
+      this.emitter.on(event.name, event.listener)
+    );
+
+    this.iterator = this.stepsIterator();
     return this;
   }
 
-  on(event: string | symbol, fnc: any): Runnable {
-    this.emitter.on(event, fnc);
+  getState(): object {
+    return this.state;
+  }
+
+  getEmitter(): EventEmitter {
+    return this.emitter;
+  }
+
+  on(event: string | symbol, fnc: Function): Runnable {
+    this.subEvents.push({ name: event, listener: fnc });
     return this;
   }
 
@@ -44,9 +63,9 @@ export default class Runnable {
     return this.emitter.emit(event, ...args);
   }
 
-  setStep(step: Step) {
-    this.steps.push(step);
-    if (step.name) this.nodes.add(step.name);
+  private setStep(step: Step) {
+    const length = this.steps.push(step);
+    if (step.name) this.nodes.set(step.name, length - 1);
   }
 
   milestone(name: string): Runnable {
@@ -258,8 +277,7 @@ export default class Runnable {
       const goto = condition ? await this._exec(condition) : true;
 
       if (goto) {
-        const index = this.steps.findIndex((step) => step.name === to);
-        this.nextStep = index;
+        this.nextStep = this.nodes.get(to);
         this.iteractionCount += 1;
         break;
       }
@@ -270,7 +288,7 @@ export default class Runnable {
 
   stepsIterator(): IteratorFunction {
     return {
-      next: () => {
+      next: (): Iteration => {
         if (this.nextStep < this.steps.length) {
           const result = { value: this.steps[this.nextStep], done: false };
           this.nextStep += 1;
@@ -293,7 +311,9 @@ export default class Runnable {
     this.emit("step", event);
   }
 
-  async iterate(iteration: any) {
+  async iterate(iteration?: Iteration) {
+    if (!iteration) iteration = this.iterator.next();
+
     if (!iteration.done) {
       const { step, type, name, fnc, key, options } = iteration.value;
       switch (type) {
@@ -336,29 +356,38 @@ export default class Runnable {
     }
   }
 
-  private _warm(state?: object, params: RunnableParams = {}) {
-    if (state) this.state = { ...this.state, ...state };
-    if (params.emitter) this.emitter = params.emitter;
-    if (params.name) this.name = params.name;
+  private clone(state: object = {}, params: RunnableParams = {}): Runnable {
+    const stato = structuredClone({ ...this.state, ...state });
+    const options: RunnableParams = {
+      name: params.name ?? this.name,
+      emitter: params.emitter ?? new EventEmitter(),
+      maxIterations: this.maxIterations,
+      nodes: params.nodes ?? this.nodes,
+      steps: params.steps ?? this.steps,
+      subEvents: params.subEvents ?? this.subEvents
+    };
 
-    this.iterator = this.stepsIterator();
+    const runnable = new Runnable(stato, options);
+
+    return runnable;
   }
 
   async run(state?: object, params: RunnableParams = {}) {
-    this._warm(state, params);
-    await this.iterate(this.iterator.next());
+    const rnb = this.clone(state, params);
+    await rnb.iterate();
 
-    return this.state;
+    return rnb.getState();
   }
 
   async *stream(
     state?: object,
     params: RunnableParams = {}
   ): AsyncGenerator<StepEvent> {
-    this._warm(state, params);
-    this.iterate(this.iterator.next());
+    const rnb = this.clone(state, params);
+    const emitter = rnb.getEmitter();
+    rnb.iterate();
 
-    for await (const [iteration] of on(this.emitter, "step")) {
+    for await (const [iteration] of on(emitter, "step")) {
       yield iteration;
     }
   }
@@ -372,112 +401,9 @@ export default class Runnable {
     return r;
   }
 
-  static init(state: object = {}, params: RunnableParams = {}) {
-    const runnable = new Runnable(state, params);
+  static init(params: RunnableParams = {}) {
+    const runnable = new Runnable({}, params);
     runnable.setStep({ type: StepType.INIT });
     return runnable;
   }
-}
-
-const subSequence = Runnable.from(
-  [
-    { k: async () => "O", j: 1 },
-    async (state: any) => {
-      state.y = "ciao";
-      return state;
-    }
-  ],
-  { name: "sub:seq" }
-);
-
-const subSubSequence = Runnable.from(
-  [
-    { z: async () => "Z" },
-    {
-      y: async (state: any) => "Y"
-    }
-  ],
-  { name: "sub:sub:seq" }
-);
-
-const main = Runnable.init({}, { name: "main:seq" })
-  .assign({ b: async () => await 2 })
-  .pipe(
-    async (state: any) => {
-      state.a = state.a + 1;
-      return state;
-    },
-    { name: "increment-a" }
-  )
-  .passThrough((state: any, emitter: EventEmitter) => {
-    if (state.a === 1) emitter.emit("check", "a is ok");
-  })
-  .pipe(async (state: any) => {
-    state.c = 3;
-
-    return state;
-  })
-  .milestone("STATE:UPDATED:ANALYZED")
-  .pipe(subSequence)
-  .branch([
-    {
-      if: async (state: any) => state.a === 1,
-      then: subSubSequence
-    },
-    {
-      if: async (state: any) => state.a === 1,
-      then: async (state: any) => {
-        state.e = 5;
-        return state;
-      }
-    }
-  ])
-  .parallel([
-    async (state: any) => {
-      state.f = 6;
-      return state;
-    },
-    async (state: any) => {
-      state.g = 7;
-      return state;
-    }
-  ])
-  .go([
-    { to: "increment-a", if: async (state: any) => state.a < 4 },
-    { to: "STATE:UPDATED:ANALYZED", if: async (state: any) => state.a > 9 }
-  ])
-  .assign({
-    blocks: [
-      { id: 1, items: [{ id: 1 }, { id: 2 }, { id: 3 }] },
-      { id: 2, items: [{ id: 1 }, { id: 2 }, { id: 3 }] }
-    ]
-  })
-  .loop({
-    key: "blocks",
-    chain: (chain: Runnable) =>
-      chain.loop({
-        key: "items",
-        chain: (chain: Runnable) =>
-          chain.parallel([
-            async (state: any) => {
-              state.element.title = "title";
-              return state;
-            },
-            async (state: any) => {
-              state.element.description = "description";
-              return state;
-            }
-          ])
-      })
-  })
-  .pick("j")
-  .on("check", (msg: string) => console.log(msg));
-
-// const res = await main.run({ a: 0 });
-// console.log(JSON.stringify(res, null, 2));
-
-const stream = main.stream({ a: 0 });
-
-for await (const state of stream) {
-  console.log(state.origin, state.type, state.name ?? "");
 }

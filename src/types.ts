@@ -44,12 +44,25 @@ export type StepEvent = {
   state: { [key: string]: any };
 };
 
+export type Iteration = {
+  value: Step | null;
+  done: boolean;
+};
+
 export type IteratorFunction = {
-  next: () => { value: Step; done: boolean } | { value: null; done: true };
+  next: () => Iteration;
+};
+
+export type EventType = {
+  name: string | symbol;
+  listener: any;
 };
 
 export type RunnableParams = {
   name?: string;
   emitter?: EventEmitter;
   maxIterations?: number;
+  nodes?: Map<string, number>;
+  steps?: Step[];
+  subEvents?: EventType[];
 };

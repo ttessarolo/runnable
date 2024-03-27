@@ -1,6 +1,6 @@
 /// <reference types="node" resolution-mode="require"/>
 import EventEmitter from "node:events";
-import { SwitchCase, StepOptions, Roote, Step, StepEvent, IteratorFunction, RunnableParams } from "./types.js";
+import { SwitchCase, StepOptions, Roote, Step, StepEvent, Iteration, IteratorFunction, RunnableParams } from "./types.js";
 export default class Runnable {
     name?: string;
     state: object;
@@ -11,10 +11,13 @@ export default class Runnable {
     private nextStep;
     private nodes;
     private iteractionCount;
-    constructor(state: object, params?: RunnableParams);
-    on(event: string | symbol, fnc: any): Runnable;
+    private subEvents;
+    private constructor();
+    getState(): object;
+    getEmitter(): EventEmitter;
+    on(event: string | symbol, fnc: Function): Runnable;
     emit(event: string | symbol, ...args: any[]): boolean;
-    setStep(step: Step): void;
+    private setStep;
     milestone(name: string): Runnable;
     pipe(fnc: Function | Runnable, options?: StepOptions): Runnable;
     assign(key: string | object, fnc?: Function, options?: StepOptions): Runnable;
@@ -39,10 +42,10 @@ export default class Runnable {
     private _go;
     stepsIterator(): IteratorFunction;
     private emitStep;
-    iterate(iteration: any): Promise<void>;
-    private _warm;
+    iterate(iteration?: Iteration): Promise<void>;
+    private clone;
     run(state?: object, params?: RunnableParams): Promise<object>;
     stream(state?: object, params?: RunnableParams): AsyncGenerator<StepEvent>;
     static from(steps: any[], params?: RunnableParams): Runnable;
-    static init(state?: object, params?: RunnableParams): Runnable;
+    static init(params?: RunnableParams): Runnable;
 }

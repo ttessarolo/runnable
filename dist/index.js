@@ -6,28 +6,45 @@ import set from "lodash.set";
 import { isFunc, sleep } from "./utils.js";
 import { StepType } from "./types.js";
 export default class Runnable {
+    name;
+    state;
+    emitter;
+    steps = [];
+    iterator;
+    maxIterations;
+    nextStep = 0;
+    nodes;
+    iteractionCount = 0;
+    subEvents;
     constructor(state, params = {}) {
-        this.steps = [];
-        this.nextStep = 0;
-        this.nodes = new Set();
-        this.iteractionCount = 0;
         this.name = params.name;
         this.state = state;
         this.emitter = params.emitter ?? new EventEmitter();
         this.maxIterations = params.maxIterations ?? 25;
+        this.nodes = params.nodes ?? new Map();
+        this.steps = params.steps ?? [];
+        this.subEvents = params.subEvents ?? [];
+        this.subEvents.forEach((event) => this.emitter.on(event.name, event.listener));
+        this.iterator = this.stepsIterator();
         return this;
     }
+    getState() {
+        return this.state;
+    }
+    getEmitter() {
+        return this.emitter;
+    }
     on(event, fnc) {
-        this.emitter.on(event, fnc);
+        this.subEvents.push({ name: event, listener: fnc });
         return this;
     }
     emit(event, ...args) {
         return this.emitter.emit(event, ...args);
     }
     setStep(step) {
-        this.steps.push(step);
+        const length = this.steps.push(step);
         if (step.name)
-            this.nodes.add(step.name);
+            this.nodes.set(step.name, length - 1);
     }
     milestone(name) {
         this.setStep({ type: StepType.MILESTONE, name });
@@ -193,8 +210,7 @@ export default class Runnable {
                 throw new Error(`Max iterations reached`);
             const goto = condition ? await this._exec(condition) : true;
             if (goto) {
-                const index = this.steps.findIndex((step) => step.name === to);
-                this.nextStep = index;
+                this.nextStep = this.nodes.get(to);
                 this.iteractionCount += 1;
                 break;
             }
@@ -224,6 +240,8 @@ export default class Runnable {
         this.emit("step", event);
     }
     async iterate(iteration) {
+        if (!iteration)
+            iteration = this.iterator.next();
         if (!iteration.done) {
             const { step, type, name, fnc, key, options } = iteration.value;
             switch (type) {
@@ -263,24 +281,29 @@ export default class Runnable {
             await this.iterate(this.iterator.next());
         }
     }
-    _warm(state, params = {}) {
-        if (state)
-            this.state = { ...this.state, ...state };
-        if (params.emitter)
-            this.emitter = params.emitter;
-        if (params.name)
-            this.name = params.name;
-        this.iterator = this.stepsIterator();
+    clone(state = {}, params = {}) {
+        const stato = structuredClone({ ...this.state, ...state });
+        const options = {
+            name: params.name ?? this.name,
+            emitter: params.emitter ?? new EventEmitter(),
+            maxIterations: this.maxIterations,
+            nodes: params.nodes ?? this.nodes,
+            steps: params.steps ?? this.steps,
+            subEvents: params.subEvents ?? this.subEvents
+        };
+        const runnable = new Runnable(stato, options);
+        return runnable;
     }
     async run(state, params = {}) {
-        this._warm(state, params);
-        await this.iterate(this.iterator.next());
-        return this.state;
+        const rnb = this.clone(state, params);
+        await rnb.iterate();
+        return rnb.getState();
     }
     async *stream(state, params = {}) {
-        this._warm(state, params);
-        this.iterate(this.iterator.next());
-        for await (const [iteration] of on(this.emitter, "step")) {
+        const rnb = this.clone(state, params);
+        const emitter = rnb.getEmitter();
+        rnb.iterate();
+        for await (const [iteration] of on(emitter, "step")) {
             yield iteration;
         }
     }
@@ -294,95 +317,9 @@ export default class Runnable {
         }
         return r;
     }
-    static init(state = {}, params = {}) {
-        const runnable = new Runnable(state, params);
+    static init(params = {}) {
+        const runnable = new Runnable({}, params);
         runnable.setStep({ type: StepType.INIT });
         return runnable;
     }
-}
-const subSequence = Runnable.from([
-    { k: async () => "O", j: 1 },
-    async (state) => {
-        state.y = "ciao";
-        return state;
-    }
-], { name: "sub:seq" });
-const subSubSequence = Runnable.from([
-    { z: async () => "Z" },
-    {
-        y: async (state) => "Y"
-    }
-], { name: "sub:sub:seq" });
-const main = Runnable.init({}, { name: "main:seq" })
-    .assign({ b: async () => await 2 })
-    .pipe(async (state) => {
-    state.a = state.a + 1;
-    return state;
-}, { name: "increment-a" })
-    .passThrough((state, emitter) => {
-    if (state.a === 1)
-        emitter.emit("check", "a is ok");
-})
-    .pipe(async (state) => {
-    state.c = 3;
-    return state;
-})
-    .milestone("STATE:UPDATED:ANALYZED")
-    .pipe(subSequence)
-    .branch([
-    {
-        if: async (state) => state.a === 1,
-        then: subSubSequence
-    },
-    {
-        if: async (state) => state.a === 1,
-        then: async (state) => {
-            state.e = 5;
-            return state;
-        }
-    }
-])
-    .parallel([
-    async (state) => {
-        state.f = 6;
-        return state;
-    },
-    async (state) => {
-        state.g = 7;
-        return state;
-    }
-])
-    .go([
-    { to: "increment-a", if: async (state) => state.a < 4 },
-    { to: "STATE:UPDATED:ANALYZED", if: async (state) => state.a > 9 }
-])
-    .assign({
-    blocks: [
-        { id: 1, items: [{ id: 1 }, { id: 2 }, { id: 3 }] },
-        { id: 2, items: [{ id: 1 }, { id: 2 }, { id: 3 }] }
-    ]
-})
-    .loop({
-    key: "blocks",
-    chain: (chain) => chain.loop({
-        key: "items",
-        chain: (chain) => chain.parallel([
-            async (state) => {
-                state.element.title = "title";
-                return state;
-            },
-            async (state) => {
-                state.element.description = "description";
-                return state;
-            }
-        ])
-    })
-})
-    .pick("j")
-    .on("check", (msg) => console.log(msg));
-// const res = await main.run({ a: 0 });
-// console.log(JSON.stringify(res, null, 2));
-const stream = main.stream({ a: 0 });
-for await (const state of stream) {
-    console.log(state.origin, state.type, state.name ?? "");
 }

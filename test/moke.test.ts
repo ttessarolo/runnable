@@ -1,3 +1,4 @@
+import { expect, jest, test } from "@jest/globals";
 import EventEmitter from "node:events";
 import Runnable from "../dist/index.js";
 
@@ -16,13 +17,16 @@ const subSubSequence = Runnable.from(
   [
     { z: async () => "Z" },
     {
-      y: async (state: any) => "Y"
+      y: async (state: any) => {
+        console.log("🚀 SUB-SUB-SEQUENCE", "y => Y");
+        return "Y";
+      }
     }
   ],
   { name: "sub:sub:seq" }
 );
 
-const main = Runnable.init({}, { name: "main:seq" })
+const main = Runnable.init({ name: "main:seq" })
   .assign({ b: async () => await 2 })
   .pipe(
     async (state: any) => {
@@ -92,14 +96,63 @@ const main = Runnable.init({}, { name: "main:seq" })
           ])
       })
   })
-  .pick("j")
+  //.pick("j")
   .on("check", (msg: string) => console.log(msg));
 
 // const res = await main.run({ a: 0 });
 // console.log(JSON.stringify(res, null, 2));
 
-const stream = main.stream({ a: 0 });
+// const all = await Promise.all([
+//   main.run({ a: 5, _sig: "1" }),
+//   main.run({ a: 1, _sig: "2" }),
+//   main.run({ a: 2, _sig: "3" })
+// ]);
 
-for await (const state of stream) {
-  console.log(state.origin, state.type, state.name ?? "");
-}
+// console.log(all);
+
+// const stream = main.stream({ a: 0 });
+
+// for await (const state of stream) {
+//   console.log(state.origin, state.type, state.name ?? "");
+// }
+
+test("main", async () => {
+  let res;
+
+  res = await main.run({ a: 0 }).catch((e) => {
+    {
+      console.log(e);
+    }
+  });
+
+  const k = {
+    a: 4,
+    b: 2,
+    c: 3,
+    k: "O",
+    j: 1,
+    y: "ciao",
+    z: "Z",
+    f: 6,
+    g: 7,
+    blocks: [
+      {
+        id: 1,
+        items: [
+          { id: 1, title: "title", description: "description" },
+          { id: 2, title: "title", description: "description" },
+          { id: 3, title: "title", description: "description" }
+        ]
+      },
+      {
+        id: 2,
+        items: [
+          { id: 1, title: "title", description: "description" },
+          { id: 2, title: "title", description: "description" },
+          { id: 3, title: "title", description: "description" }
+        ]
+      }
+    ]
+  };
+  expect(res).toEqual(k);
+});

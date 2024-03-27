@@ -1,16 +1,19 @@
 {
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
-    "target": "ES2021",
+    "target": "ESNext",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "outDir": "dist",
     "rootDir": "src",
     "esModuleInterop": true,
     "declaration": true,
-    "strictPropertyInitialization": false
-    //"allowJs": true
+    "strictPropertyInitialization": false,
+    // "allowImportingTsExtensions": true,
+    // "noEmit": true,
+    "allowJs": true
+
     // "strict": true
   },
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules", "test", "coverage", "jest.config.js"]
 }
