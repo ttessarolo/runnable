@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.6.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.5.0%0Dv1.6.0) (2024-04-02)
+
+
+### Features
+
+* stream as Transformer + stremLog ([6b77b1b](https://github.com/ttessarolo/runnable/commits/6b77b1b03a2232da4a05330804c7caa940f850fb))
+
 ## [1.5.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.4.1%0Dv1.5.0) (2024-03-27)
 
 
