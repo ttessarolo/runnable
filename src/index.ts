@@ -1,5 +1,7 @@
 import EventEmitter, { on } from "node:events";
+import { Transform } from "node:stream";
 import { v4 as uuidv4 } from "uuid";
+import { mapper } from "hwp";
 import merge from "lodash.merge";
 import get from "lodash.get";
 import set from "lodash.set";
@@ -13,6 +15,7 @@ import {
   StepEvent,
   Iteration,
   IteratorFunction,
+  RunFncInterface,
   EventType,
   RunnableParams
 } from "./types.js";
@@ -151,7 +154,7 @@ export default class Runnable {
     const stato = structuredClone(this.state);
     return fnc instanceof Runnable
       ? await fnc.run(stato, { emitter: this.emitter })
-      : await fnc(stato, this.emitter);
+      : await fnc(stato, { emit: this.emitter.emit.bind(this.emitter) });
   }
 
   private async _pipe(fnc: Function | Runnable): Promise<Runnable> {
@@ -379,7 +382,14 @@ export default class Runnable {
     return rnb.getState();
   }
 
-  async *stream(
+  stream(params: RunnableParams = {}): Transform {
+    return mapper(
+      (state?: object) => this.run(state, params),
+      params.highWaterMark ?? 16
+    );
+  }
+
+  async *streamLog(
     state?: object,
     params: RunnableParams = {}
   ): AsyncGenerator<StepEvent> {

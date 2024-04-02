@@ -1,5 +1,7 @@
 /// <reference types="node" resolution-mode="require"/>
+/// <reference types="node" resolution-mode="require"/>
 import EventEmitter from "node:events";
+import { Transform } from "node:stream";
 import { SwitchCase, StepOptions, Roote, Step, StepEvent, Iteration, IteratorFunction, RunnableParams } from "./types.js";
 export default class Runnable {
     name?: string;
@@ -45,7 +47,8 @@ export default class Runnable {
     iterate(iteration?: Iteration): Promise<void>;
     private clone;
     run(state?: object, params?: RunnableParams): Promise<object>;
-    stream(state?: object, params?: RunnableParams): AsyncGenerator<StepEvent>;
+    stream(params?: RunnableParams): Transform;
+    streamLog(state?: object, params?: RunnableParams): AsyncGenerator<StepEvent>;
     static from(steps: any[], params?: RunnableParams): Runnable;
     static init(params?: RunnableParams): Runnable;
 }

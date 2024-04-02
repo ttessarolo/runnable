@@ -65,4 +65,12 @@ export type RunnableParams = {
   nodes?: Map<string, number>;
   steps?: Step[];
   subEvents?: EventType[];
+  highWaterMark?: number;
 };
+
+export interface RunFncInterface {
+  (
+    state: object,
+    params: { emit: (arg1: string | symbol, arg2: any) => void }
+  ): Promise<object>;
+}
