@@ -1,10 +1,11 @@
 import EventEmitter from "node:events";
+import { Span, Tracer, Context } from "@opentelemetry/api";
 import Runnable from "./index.js";
 
 export { Runnable };
 
 export enum StepType {
-  INIT = "init",
+  START = "start",
   PIPE = "pipe",
   ASSIGN = "assign",
   PASSTHROUGH = "passThrough",
@@ -13,7 +14,8 @@ export enum StepType {
   PARALLEL = "parallel",
   LOOP = "loop",
   GOTO = "goto",
-  MILESTONE = "milestone"
+  MILESTONE = "milestone",
+  END = "end"
 }
 
 export type SwitchCase = {
@@ -23,17 +25,17 @@ export type SwitchCase = {
 
 export type StepOptions = {
   name?: string;
+  tags?: string[];
   processAll?: boolean;
 };
 
 export type Roote = { to: string; if?: Function };
 export type Step = {
-  name?: string;
   step?: any;
   type: StepType;
   fnc?: Function;
   key?: string;
-  options?: object;
+  options?: StepOptions;
 };
 
 export type StepEvent = {
@@ -41,6 +43,7 @@ export type StepEvent = {
   name?: string;
   type: string;
   origin?: string;
+  tags?: string[];
   state: { [key: string]: any };
 };
 
@@ -66,6 +69,7 @@ export type RunnableParams = {
   steps?: Step[];
   subEvents?: EventType[];
   highWaterMark?: number;
+  context?: any;
 };
 
 export interface RunFncInterface {

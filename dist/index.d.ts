@@ -2,21 +2,29 @@
 /// <reference types="node" resolution-mode="require"/>
 import EventEmitter from "node:events";
 import { Transform } from "node:stream";
-import { SwitchCase, StepOptions, Roote, Step, StepEvent, Iteration, IteratorFunction, RunnableParams } from "./types.js";
+import { Tracer, Meter } from "@opentelemetry/api";
+import { SwitchCase, StepOptions, Roote, StepEvent, Iteration, IteratorFunction, RunnableParams } from "./types.js";
 export default class Runnable {
-    name?: string;
-    state: object;
-    emitter: EventEmitter;
-    steps: Step[];
-    iterator: IteratorFunction | undefined;
-    maxIterations: number;
+    private name?;
+    private state;
+    private emitter;
+    private steps;
+    private iterator;
+    private maxIterations;
     private nextStep;
     private nodes;
     private iteractionCount;
     private subEvents;
+    private context;
+    private tracer;
+    private meter;
+    private runDuration;
     private constructor();
     getState(): object;
     getEmitter(): EventEmitter;
+    getTracer(): Tracer;
+    getMeter(): Meter;
+    checkEnd(): void;
     on(event: string | symbol, fnc: Function): Runnable;
     emit(event: string | symbol, ...args: any[]): boolean;
     private setStep;

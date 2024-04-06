@@ -3,7 +3,7 @@ import EventEmitter from "node:events";
 import Runnable from "./index.js";
 export { Runnable };
 export declare enum StepType {
-    INIT = "init",
+    START = "start",
     PIPE = "pipe",
     ASSIGN = "assign",
     PASSTHROUGH = "passThrough",
@@ -12,7 +12,8 @@ export declare enum StepType {
     PARALLEL = "parallel",
     LOOP = "loop",
     GOTO = "goto",
-    MILESTONE = "milestone"
+    MILESTONE = "milestone",
+    END = "end"
 }
 export type SwitchCase = {
     if: Function;
@@ -20,6 +21,7 @@ export type SwitchCase = {
 };
 export type StepOptions = {
     name?: string;
+    tags?: string[];
     processAll?: boolean;
 };
 export type Roote = {
@@ -27,18 +29,18 @@ export type Roote = {
     if?: Function;
 };
 export type Step = {
-    name?: string;
     step?: any;
     type: StepType;
     fnc?: Function;
     key?: string;
-    options?: object;
+    options?: StepOptions;
 };
 export type StepEvent = {
     id: string;
     name?: string;
     type: string;
     origin?: string;
+    tags?: string[];
     state: {
         [key: string]: any;
     };
@@ -62,6 +64,7 @@ export type RunnableParams = {
     steps?: Step[];
     subEvents?: EventType[];
     highWaterMark?: number;
+    context?: any;
 };
 export interface RunFncInterface {
     (state: object, params: {

@@ -2,6 +2,7 @@ import { Readable, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
+import "./instrumentation.js";
 
 interface State {
   a: number;
@@ -17,7 +18,7 @@ const results: State[] = Array.from({ length: 10 }, (_, a) => ({
   b: a + 1
 }));
 
-const main = Runnable.init({ name: "main:seq" }).assign({
+const main = Runnable.init({ name: "stream:main:seq" }).assign({
   b: async (state: State) => state.a + 1
 });
 

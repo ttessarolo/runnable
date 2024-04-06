@@ -1,7 +1,6 @@
-import { expect, jest, test } from "@jest/globals";
-import EventEmitter from "node:events";
+import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
-import { RunFncInterface } from "../dist/types.js";
+import "./instrumentation.js";
 
 const subSequence = Runnable.from(
   [
@@ -26,7 +25,7 @@ const subSubSequence = Runnable.from(
   { name: "sub:sub:seq" }
 );
 
-const main = Runnable.init({ name: "main:seq" })
+const main = Runnable.init({ name: "full:main:seq" })
   .assign({ b: async () => await 2 })
   .pipe(
     async (state: any) => {
@@ -43,7 +42,7 @@ const main = Runnable.init({ name: "main:seq" })
 
     return state;
   })
-  .milestone("STATE:UPDATED:ANALYZED")
+  .milestone("state:analyzed")
   .pipe(subSequence)
   .branch([
     {
@@ -70,7 +69,7 @@ const main = Runnable.init({ name: "main:seq" })
   ])
   .go([
     { to: "increment-a", if: async (state: any) => state.a < 4 },
-    { to: "STATE:UPDATED:ANALYZED", if: async (state: any) => state.a > 9 }
+    { to: "state:analyzed", if: async (state: any) => state.a > 9 }
   ])
   .assign({
     blocks: [

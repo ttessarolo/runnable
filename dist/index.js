@@ -4,7 +4,8 @@ import { mapper } from "hwp";
 import merge from "lodash.merge";
 import get from "lodash.get";
 import set from "lodash.set";
-import { isFunc, sleep } from "./utils.js";
+import { metrics, trace, SpanStatusCode } from "@opentelemetry/api";
+import { isFunc } from "./utils.js";
 import { StepType } from "./types.js";
 export default class Runnable {
     name;
@@ -17,6 +18,10 @@ export default class Runnable {
     nodes;
     iteractionCount = 0;
     subEvents;
+    context;
+    tracer;
+    meter;
+    runDuration;
     constructor(state, params = {}) {
         this.name = params.name;
         this.state = state;
@@ -25,8 +30,12 @@ export default class Runnable {
         this.nodes = params.nodes ?? new Map();
         this.steps = params.steps ?? [];
         this.subEvents = params.subEvents ?? [];
+        this.context = params.context ?? this;
         this.subEvents.forEach((event) => this.emitter.on(event.name, event.listener));
         this.iterator = this.stepsIterator();
+        this.tracer = trace.getTracer("runnable:tracer");
+        this.meter = metrics.getMeter("runnable:meter");
+        this.runDuration = this.meter.createHistogram("runnable.run.duration");
         return this;
     }
     getState() {
@@ -34,6 +43,17 @@ export default class Runnable {
     }
     getEmitter() {
         return this.emitter;
+    }
+    getTracer() {
+        return this.tracer;
+    }
+    getMeter() {
+        return this.meter;
+    }
+    checkEnd() {
+        if (this.steps.at(-1)?.type !== StepType.END) {
+            this.setStep({ type: StepType.END });
+        }
     }
     on(event, fnc) {
         this.subEvents.push({ name: event, listener: fnc });
@@ -44,15 +64,19 @@ export default class Runnable {
     }
     setStep(step) {
         const length = this.steps.push(step);
-        if (step.name)
-            this.nodes.set(step.name, length - 1);
+        if (step.options?.name)
+            this.nodes.set(step.options?.name, length - 1);
     }
     milestone(name) {
-        this.setStep({ type: StepType.MILESTONE, name });
+        this.setStep({ type: StepType.MILESTONE, options: { name } });
         return this;
     }
     pipe(fnc, options) {
-        this.setStep({ step: fnc, type: StepType.PIPE, name: options?.name });
+        this.setStep({
+            step: fnc,
+            type: StepType.PIPE,
+            options
+        });
         return this;
     }
     assign(key, fnc, options) {
@@ -60,7 +84,7 @@ export default class Runnable {
             step: key,
             type: StepType.ASSIGN,
             fnc: fnc,
-            name: options?.name
+            options
         });
         return this;
     }
@@ -68,29 +92,40 @@ export default class Runnable {
         this.setStep({
             step: fnc,
             type: StepType.PASSTHROUGH,
-            name: options?.name
+            options
         });
         return this;
     }
     pick(keys, options) {
-        this.setStep({ step: keys, type: StepType.PICK, name: options?.name });
+        this.setStep({
+            step: keys,
+            type: StepType.PICK,
+            options
+        });
         return this;
     }
     branch(fnc, options) {
-        this.setStep({ step: fnc, type: StepType.BRANCH, name: options?.name });
+        this.setStep({
+            step: fnc,
+            type: StepType.BRANCH,
+            options
+        });
         return this;
     }
     branchAll(fnc, options) {
         this.setStep({
             step: fnc,
             type: StepType.BRANCH,
-            options: { processAll: true },
-            name: options?.name
+            options: { ...options, processAll: true }
         });
         return this;
     }
     parallel(fncs, options) {
-        this.setStep({ step: fncs, type: StepType.PARALLEL, name: options?.name });
+        this.setStep({
+            step: fncs,
+            type: StepType.PARALLEL,
+            options
+        });
         return this;
     }
     loop(params, options) {
@@ -98,7 +133,7 @@ export default class Runnable {
             step: params.chain,
             type: StepType.LOOP,
             key: params.key,
-            name: options?.name
+            options
         });
         return this;
     }
@@ -106,15 +141,41 @@ export default class Runnable {
         this.setStep({
             step: rootes,
             type: StepType.GOTO,
-            name: options?.name
+            options
         });
         return this;
     }
     async _exec(fnc) {
         const stato = structuredClone(this.state);
         return fnc instanceof Runnable
-            ? await fnc.run(stato, { emitter: this.emitter })
-            : await fnc(stato, { emit: this.emitter.emit.bind(this.emitter) });
+            ? await fnc.run(stato, {
+                emitter: this.emitter,
+                context: this.context
+            })
+            : await this.tracer.startActiveSpan(`${this.name}:func:exec`, async (span) => {
+                try {
+                    if (span.isRecording()) {
+                        span.addEvent(JSON.stringify(stato));
+                    }
+                    const response = await fnc.call(this.context, stato, {
+                        emit: this.emitter.emit.bind(this.emitter)
+                    });
+                    if (span.isRecording()) {
+                        if (span.isRecording()) {
+                            span.addEvent(JSON.stringify(response));
+                        }
+                    }
+                    return response;
+                }
+                catch (ex) {
+                    span.recordException(ex);
+                    span.setStatus({ code: SpanStatusCode.ERROR });
+                    throw ex;
+                }
+                finally {
+                    span.end();
+                }
+            });
     }
     async _pipe(fnc) {
         this.state = { ...this.state, ...(await this._exec(fnc)) };
@@ -195,7 +256,11 @@ export default class Runnable {
             throw new Error("Loop key must be an array");
         for (let i = 0, length = _loop.length; i < length; i++) {
             const element = _loop[i];
-            const runnable = new Runnable({ element, index: i }, { emitter: this.emitter, name: `${this.name}:loop:${key}:${i}` });
+            const runnable = new Runnable({ element, index: i }, {
+                emitter: this.emitter,
+                context: this.context,
+                name: `${this.name}:loop:${key}:${i}`
+            });
             const result = await chain(runnable).run();
             _loop[i] = { ...element, ...result.element };
         }
@@ -230,11 +295,12 @@ export default class Runnable {
             }
         };
     }
-    emitStep(type, name) {
+    emitStep(type, options) {
         const event = {
             id: uuidv4(),
-            name: name,
+            name: options?.name,
             type,
+            tags: options?.tags,
             origin: this.name,
             state: this.state
         };
@@ -244,42 +310,63 @@ export default class Runnable {
         if (!iteration)
             iteration = this.iterator.next();
         if (!iteration.done) {
-            const { step, type, name, fnc, key, options } = iteration.value;
-            switch (type) {
-                case StepType.INIT:
-                case StepType.MILESTONE:
-                    await sleep(1);
-                    break;
-                case StepType.PIPE:
-                    await this._pipe(step);
-                    break;
-                case StepType.ASSIGN:
-                    await this._assign(step, fnc);
-                    break;
-                case StepType.PASSTHROUGH:
-                    await this._passThrough(step);
-                    break;
-                case StepType.BRANCH:
-                    await this._branch(step, options);
-                    break;
-                case StepType.PARALLEL:
-                    await this._parallel(step, options);
-                    break;
-                case StepType.LOOP:
-                    await this._loop(step, key);
-                    break;
-                case StepType.PICK:
-                    await this._pick(step);
-                    break;
-                case StepType.GOTO:
-                    await this._go(step);
-                    break;
-                default:
-                    throw new Error("Invalid step type");
-                    break;
-            }
-            this.emitStep(type, name);
-            await this.iterate(this.iterator.next());
+            const { step, type, fnc, key, options } = iteration.value;
+            await this.tracer.startActiveSpan(`${this.name}:${type}${options?.name ? `:${options?.name}` : ""}`, async (span) => {
+                span.setAttributes({
+                    "runable.origin": this.name,
+                    "rubbable.type": type,
+                    "runnable.name": options?.name,
+                    "runnable.tags": options?.tags
+                });
+                try {
+                    switch (type) {
+                        case StepType.START:
+                        case StepType.MILESTONE:
+                        case StepType.END:
+                            break;
+                        case StepType.PIPE:
+                            await this._pipe(step);
+                            break;
+                        case StepType.ASSIGN:
+                            await this._assign(step, fnc);
+                            break;
+                        case StepType.PASSTHROUGH:
+                            await this._passThrough(step);
+                            break;
+                        case StepType.BRANCH:
+                            await this._branch(step, options);
+                            break;
+                        case StepType.PARALLEL:
+                            await this._parallel(step, options);
+                            break;
+                        case StepType.LOOP:
+                            await this._loop(step, key);
+                            break;
+                        case StepType.PICK:
+                            await this._pick(step);
+                            break;
+                        case StepType.GOTO:
+                            await this._go(step);
+                            break;
+                        default:
+                            throw new Error("Invalid step type");
+                            break;
+                    }
+                    if (span.isRecording()) {
+                        span.addEvent(JSON.stringify(this.state));
+                    }
+                    this.emitStep(type, options);
+                    await this.iterate(this.iterator.next());
+                }
+                catch (ex) {
+                    span.recordException(ex);
+                    span.setStatus({ code: SpanStatusCode.ERROR });
+                    throw ex;
+                }
+                finally {
+                    span.end();
+                }
+            });
         }
     }
     clone(state = {}, params = {}) {
@@ -290,15 +377,33 @@ export default class Runnable {
             maxIterations: this.maxIterations,
             nodes: params.nodes ?? this.nodes,
             steps: params.steps ?? this.steps,
-            subEvents: params.subEvents ?? this.subEvents
+            subEvents: params.subEvents ?? this.subEvents,
+            context: this.context
         };
         const runnable = new Runnable(stato, options);
+        runnable.checkEnd();
         return runnable;
     }
     async run(state, params = {}) {
+        const startTime = new Date().getTime();
         const rnb = this.clone(state, params);
-        await rnb.iterate();
-        return rnb.getState();
+        return rnb.getTracer().startActiveSpan(this.name, async (span) => {
+            try {
+                await rnb.iterate();
+                return rnb.getState();
+            }
+            catch (ex) {
+                span.recordException(ex);
+                span.setStatus({ code: SpanStatusCode.ERROR });
+                throw ex;
+            }
+            finally {
+                const endTime = new Date().getTime();
+                const executionTime = endTime - startTime;
+                this.runDuration.record(executionTime);
+                span.end();
+            }
+        });
     }
     stream(params = {}) {
         return mapper((state) => this.run(state, params), params.highWaterMark ?? 16);
@@ -323,7 +428,7 @@ export default class Runnable {
     }
     static init(params = {}) {
         const runnable = new Runnable({}, params);
-        runnable.setStep({ type: StepType.INIT });
+        runnable.setStep({ type: StepType.START });
         return runnable;
     }
 }

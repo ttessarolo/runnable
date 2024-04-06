@@ -2,7 +2,7 @@ import Runnable from "./index.js";
 export { Runnable };
 export var StepType;
 (function (StepType) {
-    StepType["INIT"] = "init";
+    StepType["START"] = "start";
     StepType["PIPE"] = "pipe";
     StepType["ASSIGN"] = "assign";
     StepType["PASSTHROUGH"] = "passThrough";
@@ -12,4 +12,5 @@ export var StepType;
     StepType["LOOP"] = "loop";
     StepType["GOTO"] = "goto";
     StepType["MILESTONE"] = "milestone";
+    StepType["END"] = "end";
 })(StepType || (StepType = {}));
