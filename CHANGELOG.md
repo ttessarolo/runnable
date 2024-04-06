@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.1](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.0%0Dv1.6.1) (2024-04-06)
+
+
+### Others
+
+* opentelemetry with span and metrics ([f1e72bd](https://github.com/ttessarolo/runnable/commits/f1e72bd87458a8ffe763d3f2470603f922cffcf4))
+
 ## [1.6.0](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.5.0%0Dv1.6.0) (2024-04-02)
 
 
