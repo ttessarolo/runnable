@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.4](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.3%0Dv1.6.4) (2024-04-08)
+
+
+### Others
+
+* wrap funcs ([b93d794](https://github.com/ttessarolo/runnable/commits/b93d79415a7d2f7434b58c08c82f5e428d12e3a7))
+
 ### [1.6.3](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.2%0Dv1.6.3) (2024-04-08)
 
 
