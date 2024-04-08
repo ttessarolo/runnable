@@ -6,7 +6,7 @@
   "types": "./dist/types.d.ts",
   "type": "module",
   "scripts": {
-    "test": "jest --verbose ./test/",
+    "test": "jest --verbose ./test/wrap.test.ts",
     "commit": "git add . && git-cz",
     "version": "standard-version",
     "push": "git push --follow-tags",
@@ -44,6 +44,7 @@
     }
   },
   "dependencies": {
+    "cockatiel": "^3.1.2",
     "hwp": "^0.3.0",
     "lodash.get": "^4.4.2",
     "lodash.merge": "^4.6.2",

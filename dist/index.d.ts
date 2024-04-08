@@ -27,6 +27,7 @@ export default class Runnable {
     private checkEnd;
     on(event: string | symbol, fnc: Function): Runnable;
     emit(event: string | symbol, ...args: any[]): boolean;
+    private wrapFnc;
     private setStep;
     milestone(name: string): Runnable;
     pipe(fnc: Function | Runnable, options?: StepOptions): Runnable;

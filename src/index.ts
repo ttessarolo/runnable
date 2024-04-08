@@ -15,6 +15,14 @@ import {
   Span,
   SpanStatusCode
 } from "@opentelemetry/api";
+import {
+  ConsecutiveBreaker,
+  ExponentialBackoff,
+  retry,
+  handleAll,
+  circuitBreaker,
+  wrap
+} from "cockatiel";
 import { isFunc } from "./utils.js";
 import {
   StepType,
@@ -100,7 +108,31 @@ export default class Runnable {
     return this.emitter.emit(event, ...args);
   }
 
+  private wrapFnc(step: Step) {
+    // Skip wrapping loop chain
+    if (step.type === StepType.LOOP) return;
+
+    for (const key of ["step", "fnc"]) {
+      if ((step as any)[key] instanceof Function) {
+        const retryPolicy = retry(handleAll, {
+          maxAttempts: 3,
+          backoff: new ExponentialBackoff()
+        });
+        const circuitBreakerPolicy = circuitBreaker(handleAll, {
+          halfOpenAfter: 10 * 1000,
+          breaker: new ConsecutiveBreaker(5)
+        });
+        const wrapper = wrap(...[retryPolicy, circuitBreakerPolicy]);
+        const fnc = (step as any)[key];
+        (step as any)[key] = async function (...args: unknown[]) {
+          return await wrapper.execute(() => fnc.call(this, ...args));
+        };
+      }
+    }
+  }
+
   private setStep(step: Step) {
+    this.wrapFnc(step);
     const length = this.steps.push(step);
     if (step.options?.name) this.nodes.set(step.options?.name, length - 1);
   }
@@ -263,7 +295,8 @@ export default class Runnable {
     fnc: Function | Runnable,
     options: StepOptions = {}
   ): Promise<Runnable> {
-    this.state = merge(this.state, await this._exec(fnc, options));
+    const result = await this._exec(fnc, options);
+    this.state = options.schema ? result : merge(this.state, result);
 
     return this;
   }
@@ -382,6 +415,7 @@ export default class Runnable {
         runId: this.runId,
         name: `${this.name}:loop:${key}:${i}`
       });
+
       const result = await chain(runnable).run({ element, index: i });
       _loop[i] = { ...element, ...result.element };
     }
