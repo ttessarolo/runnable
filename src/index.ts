@@ -1,4 +1,5 @@
 import EventEmitter, { on } from "node:events";
+import { performance } from "node:perf_hooks";
 import { Transform } from "node:stream";
 import { v4 as uuidv4 } from "uuid";
 import { mapper } from "hwp";
@@ -43,6 +44,7 @@ export default class Runnable {
   private tracer: Tracer;
   private meter: Meter;
   private runDuration: Histogram;
+  private runId: string;
 
   private constructor(state: object, params: RunnableParams = {}) {
     this.name = params.name;
@@ -53,7 +55,7 @@ export default class Runnable {
     this.steps = params.steps ?? [];
     this.subEvents = params.subEvents ?? [];
     this.context = params.context ?? this;
-
+    this.runId = params.runId ?? uuidv4();
     this.subEvents.forEach((event: EventType) =>
       this.emitter.on(event.name, event.listener)
     );
@@ -82,7 +84,7 @@ export default class Runnable {
     return this.meter;
   }
 
-  checkEnd(): void {
+  private checkEnd(): void {
     if (this.steps.at(-1)?.type !== StepType.END) {
       this.setStep({ type: StepType.END });
     }
@@ -117,15 +119,16 @@ export default class Runnable {
 
   assign(
     key: string | object,
-    fnc?: Function,
+    fnc?: Function | StepOptions,
     options?: StepOptions
   ): Runnable {
     this.setStep({
       step: key,
       type: StepType.ASSIGN,
-      fnc: fnc,
-      options
+      fnc: typeof fnc === "function" ? fnc : undefined,
+      options: typeof fnc === "object" ? fnc : options
     });
+
     return this;
   }
 
@@ -196,16 +199,31 @@ export default class Runnable {
     return this;
   }
 
+  private getNow(): number {
+    return parseInt(performance.now().toString().replace(".", ""));
+  }
+
+  private setSpanAttr(span: Span) {
+    span.setAttributes({
+      "runnable.runId": this.runId,
+      "runnable.ts": this.getNow(),
+      "runnable.step": this.nextStep,
+      "runable.origin": this.name
+    });
+  }
+
   private async _exec(fnc: Function | Runnable): Promise<object> {
     const stato = structuredClone(this.state);
     return fnc instanceof Runnable
       ? await fnc.run(stato, {
           emitter: this.emitter,
-          context: this.context
+          context: this.context,
+          runId: this.runId
         })
       : await this.tracer.startActiveSpan(
-          `${this.name}:func:exec`,
+          `${this.name}:func:exec${fnc.name ? `:${fnc.name}` : ""}`,
           async (span: Span) => {
+            this.setSpanAttr(span);
             try {
               if (span.isRecording()) {
                 span.addEvent(JSON.stringify(stato));
@@ -331,15 +349,13 @@ export default class Runnable {
     if (!Array.isArray(_loop)) throw new Error("Loop key must be an array");
     for (let i = 0, length = _loop.length; i < length; i++) {
       const element = _loop[i];
-      const runnable = new Runnable(
-        { element, index: i },
-        {
-          emitter: this.emitter,
-          context: this.context,
-          name: `${this.name}:loop:${key}:${i}`
-        }
-      );
-      const result = await chain(runnable).run();
+      const runnable = Runnable.init({
+        emitter: this.emitter,
+        context: this.context,
+        runId: this.runId,
+        name: `${this.name}:loop:${key}:${i}`
+      });
+      const result = await chain(runnable).run({ element, index: i });
       _loop[i] = { ...element, ...result.element };
     }
     return this;
@@ -382,6 +398,9 @@ export default class Runnable {
   private emitStep(type: string, options?: StepOptions): void {
     const event: StepEvent = {
       id: uuidv4(),
+      runId: this.runId,
+      ts: this.getNow(),
+      step: this.nextStep,
       name: options?.name,
       type,
       tags: options?.tags,
@@ -401,10 +420,10 @@ export default class Runnable {
       await this.tracer.startActiveSpan(
         `${this.name}:${type}${options?.name ? `:${options?.name}` : ""}`,
         async (span: Span) => {
+          this.setSpanAttr(span);
           span.setAttributes({
-            "runable.origin": this.name,
             "rubbable.type": type,
-            "runnable.name": options?.name,
+            "runnable.name": options?.name ?? step?.name,
             "runnable.tags": options?.tags
           });
 
@@ -464,6 +483,7 @@ export default class Runnable {
   private clone(state: object = {}, params: RunnableParams = {}): Runnable {
     const stato = structuredClone({ ...this.state, ...state });
     const options: RunnableParams = {
+      runId: params.runId,
       name: params.name ?? this.name,
       emitter: params.emitter ?? new EventEmitter(),
       maxIterations: this.maxIterations,
@@ -484,6 +504,7 @@ export default class Runnable {
     const rnb = this.clone(state, params);
 
     return rnb.getTracer().startActiveSpan(this.name, async (span: Span) => {
+      rnb.setSpanAttr(span);
       try {
         await rnb.iterate();
         return rnb.getState();
@@ -494,7 +515,7 @@ export default class Runnable {
       } finally {
         const endTime = new Date().getTime();
         const executionTime = endTime - startTime;
-        this.runDuration.record(executionTime);
+        rnb.runDuration.record(executionTime);
         span.end();
       }
     });

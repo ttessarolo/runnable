@@ -17,8 +17,8 @@ const sdk = new NodeSDK({
     [SEMRESATTRS_SERVICE_VERSION]: "1.0"
   }),
   spanProcessors: [
-    new SimpleSpanProcessor(new JaegerExporter()),
-    new SimpleSpanProcessor(new ConsoleSpanExporter())
+    new SimpleSpanProcessor(new JaegerExporter())
+    //new SimpleSpanProcessor(new ConsoleSpanExporter())
   ],
   metricReader: new PrometheusExporter(),
   instrumentations: [getNodeAutoInstrumentations()]

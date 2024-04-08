@@ -29,6 +29,7 @@ export type Roote = {
     if?: Function;
 };
 export type Step = {
+    name?: string;
     step?: any;
     type: StepType;
     fnc?: Function;
@@ -37,6 +38,9 @@ export type Step = {
 };
 export type StepEvent = {
     id: string;
+    runId: string;
+    ts: number;
+    step: number;
     name?: string;
     type: string;
     origin?: string;
@@ -65,6 +69,7 @@ export type RunnableParams = {
     subEvents?: EventType[];
     highWaterMark?: number;
     context?: any;
+    runId?: string;
 };
 export interface RunFncInterface {
     (state: object, params: {
