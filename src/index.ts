@@ -16,6 +16,7 @@ import {
   SpanStatusCode
 } from "@opentelemetry/api";
 import {
+  IPolicy,
   ConsecutiveBreaker,
   ExponentialBackoff,
   retry,
@@ -109,20 +110,28 @@ export default class Runnable {
   }
 
   private wrapFnc(step: Step) {
-    // Skip wrapping loop chain
+    // Skip wrapping loop chain functions
     if (step.type === StepType.LOOP) return;
 
     for (const key of ["step", "fnc"]) {
       if ((step as any)[key] instanceof Function) {
-        const retryPolicy = retry(handleAll, {
-          maxAttempts: 3,
-          backoff: new ExponentialBackoff()
-        });
-        const circuitBreakerPolicy = circuitBreaker(handleAll, {
-          halfOpenAfter: 10 * 1000,
-          breaker: new ConsecutiveBreaker(5)
-        });
-        const wrapper = wrap(...[retryPolicy, circuitBreakerPolicy]);
+        const policies: IPolicy[] = [];
+
+        policies.push(
+          retry(handleAll, {
+            maxAttempts: 3,
+            backoff: new ExponentialBackoff()
+          })
+        );
+
+        policies.push(
+          circuitBreaker(handleAll, {
+            halfOpenAfter: 10 * 1000,
+            breaker: new ConsecutiveBreaker(5)
+          })
+        );
+
+        const wrapper = wrap(...policies);
         const fnc = (step as any)[key];
         (step as any)[key] = async function (...args: unknown[]) {
           return await wrapper.execute(() => fnc.call(this, ...args));

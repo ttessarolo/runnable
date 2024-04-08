@@ -68,20 +68,21 @@ export default class Runnable {
         return this.emitter.emit(event, ...args);
     }
     wrapFnc(step) {
-        // Skip wrapping loop chain
+        // Skip wrapping loop chain functions
         if (step.type === StepType.LOOP)
             return;
         for (const key of ["step", "fnc"]) {
             if (step[key] instanceof Function) {
-                const retryPolicy = retry(handleAll, {
+                const policies = [];
+                policies.push(retry(handleAll, {
                     maxAttempts: 3,
                     backoff: new ExponentialBackoff()
-                });
-                const circuitBreakerPolicy = circuitBreaker(handleAll, {
+                }));
+                policies.push(circuitBreaker(handleAll, {
                     halfOpenAfter: 10 * 1000,
                     breaker: new ConsecutiveBreaker(5)
-                });
-                const wrapper = wrap(...[retryPolicy, circuitBreakerPolicy]);
+                }));
+                const wrapper = wrap(...policies);
                 const fnc = step[key];
                 step[key] = async function (...args) {
                     return await wrapper.execute(() => fnc.call(this, ...args));
