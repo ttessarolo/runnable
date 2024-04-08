@@ -20,10 +20,12 @@ const result = {
 
 const main = Runnable.init({ name: "context:main:seq", context }).assign({
   conf: async function (state: any) {
-    return await this.config.get("key");
+    const _this: any = this;
+    return await _this.config.get("key");
   },
   remote: async function (state: any) {
-    return await this.gRPC.ingress.get("key");
+    const _this: any = this;
+    return await _this.gRPC.ingress.get("key");
   }
 });
 

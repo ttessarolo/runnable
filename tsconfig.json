@@ -11,9 +11,9 @@
     "strictPropertyInitialization": false,
     // "allowImportingTsExtensions": true,
     // "noEmit": true,
-    "allowJs": true
-
-    // "strict": true
+    "allowJs": true,
+    "strict": true
   },
+  "include": ["./src/"],
   "exclude": ["dist", "node_modules", "test", "coverage", "jest.config.js"]
 }

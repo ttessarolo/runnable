@@ -1,5 +1,6 @@
 /// <reference types="node" resolution-mode="require"/>
 import EventEmitter from "node:events";
+import { z } from "zod";
 import Runnable from "./index.js";
 export { Runnable };
 export declare enum StepType {
@@ -23,6 +24,7 @@ export type StepOptions = {
     name?: string;
     tags?: string[];
     processAll?: boolean;
+    schema?: z.ZodType;
 };
 export type Roote = {
     to: string;
@@ -71,6 +73,7 @@ export type RunnableParams = {
     context?: any;
     runId?: string;
 };
+export type StreamTransformer = (iterator: any) => AsyncGenerator<any, void, unknown>;
 export interface RunFncInterface {
     (state: object, params: {
         emit: (arg1: string | symbol, arg2: any) => void;

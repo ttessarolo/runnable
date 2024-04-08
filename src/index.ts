@@ -1,6 +1,6 @@
 import EventEmitter, { on } from "node:events";
 import { performance } from "node:perf_hooks";
-import { Transform } from "node:stream";
+import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { mapper } from "hwp";
 import merge from "lodash.merge";
@@ -25,6 +25,7 @@ import {
   StepEvent,
   Iteration,
   IteratorFunction,
+  StreamTransformer,
   EventType,
   RunnableParams
 } from "./types.js";
@@ -141,7 +142,7 @@ export default class Runnable {
     return this;
   }
 
-  pick(keys: string | string[], options?: StepOptions): Runnable {
+  pick(keys: string | string[] | z.ZodType, options?: StepOptions): Runnable {
     this.setStep({
       step: keys,
       type: StepType.PICK,
@@ -212,8 +213,16 @@ export default class Runnable {
     });
   }
 
-  private async _exec(fnc: Function | Runnable): Promise<object> {
-    const stato = structuredClone(this.state);
+  private async _exec(
+    fnc: Function | Runnable,
+    options: StepOptions = {}
+  ): Promise<object> {
+    let stato: object = {};
+
+    if (options.schema) {
+      stato = options.schema.parse(this.state);
+    } else stato = structuredClone(this.state);
+
     return fnc instanceof Runnable
       ? await fnc.run(stato, {
           emitter: this.emitter,
@@ -238,7 +247,9 @@ export default class Runnable {
               }
               return response;
             } catch (ex) {
-              span.recordException(ex);
+              if (ex instanceof Error) {
+                span.recordException(ex);
+              }
               span.setStatus({ code: SpanStatusCode.ERROR });
               throw ex;
             } finally {
@@ -248,15 +259,23 @@ export default class Runnable {
         );
   }
 
-  private async _pipe(fnc: Function | Runnable): Promise<Runnable> {
-    this.state = { ...this.state, ...(await this._exec(fnc)) };
+  private async _pipe(
+    fnc: Function | Runnable,
+    options: StepOptions = {}
+  ): Promise<Runnable> {
+    this.state = merge(this.state, await this._exec(fnc, options));
 
     return this;
   }
 
-  private _pick(keys: string | string[]): Runnable {
+  private _pick(keys: string | string[] | z.ZodType): Runnable {
+    if (keys instanceof z.ZodType) {
+      this.state = keys.parse(this.state);
+      return this;
+    }
+
     if (!Array.isArray(keys)) keys = [keys];
-    const obj = {};
+    const obj: { [key: string]: any } = {};
     keys.forEach((key) => {
       obj[key] = get(this.state, key);
     });
@@ -265,14 +284,18 @@ export default class Runnable {
     return this;
   }
 
-  private async _passThrough(fnc: Function): Promise<Runnable> {
+  private async _passThrough(
+    fnc: Function,
+    options: StepOptions = {}
+  ): Promise<Runnable> {
     await fnc(structuredClone(this.state), this.emitter);
     return this;
   }
 
   private async _assign(
     key: string | object,
-    fnc?: Function
+    fnc?: Function,
+    options: StepOptions = {}
   ): Promise<Runnable> {
     if (typeof key === "string" && !fnc) {
       throw new Error("Function is required");
@@ -285,7 +308,7 @@ export default class Runnable {
       const keys: any[] = [];
       for (const [k, objFnc] of Object.entries(key)) {
         keys.push(k);
-        if (isFunc(objFnc)) execs.push(this._exec(objFnc));
+        if (isFunc(objFnc)) execs.push(this._exec(objFnc, options));
         else execs.push(Promise.resolve(objFnc));
       }
       const values = await Promise.all(execs);
@@ -305,8 +328,8 @@ export default class Runnable {
     const execs: Promise<object>[] = [];
 
     for (const caso of cases) {
-      if (await this._exec(caso.if)) {
-        execs.push(this._exec(caso.then));
+      if (await this._exec(caso.if, options)) {
+        execs.push(this._exec(caso.then, options));
         if (!options.processAll) break;
       }
     }
@@ -319,27 +342,31 @@ export default class Runnable {
       {}
     );
 
-    this.state = { ...this.state, ...update };
+    this.state = merge(this.state, update);
 
     return this;
   }
 
   private async _parallel(
     fncs: (Function | Runnable)[],
-    options: object
+    options: StepOptions = {}
   ): Promise<Runnable> {
-    const execs = fncs.map((fnc) => this._exec(fnc));
+    const execs = fncs.map((fnc) => this._exec(fnc, options));
     const results = await Promise.all(execs);
     const update = results.reduce((acc: object, val: object) => {
       if (val) return merge(acc, val);
       return acc;
     }, {});
-    this.state = { ...this.state, ...update };
+    this.state = merge(this.state, update);
 
     return this;
   }
 
-  private async _loop(chain: Function, key: string): Promise<Runnable> {
+  private async _loop(
+    chain: Function,
+    key: string,
+    options: StepOptions = {}
+  ): Promise<Runnable> {
     const innerLoop = Object.keys(this.state).every((k) =>
       ["element", "index"].includes(k)
     );
@@ -361,7 +388,10 @@ export default class Runnable {
     return this;
   }
 
-  private async _go(rootes: Roote[] | Roote): Promise<Runnable> {
+  private async _go(
+    rootes: Roote[] | Roote,
+    options: StepOptions = {}
+  ): Promise<Runnable> {
     const roots = Array.isArray(rootes) ? rootes : [rootes];
     for (const root of roots) {
       const { to, if: condition } = root;
@@ -370,10 +400,10 @@ export default class Runnable {
       if (this.iteractionCount >= this.maxIterations)
         throw new Error(`Max iterations reached`);
 
-      const goto = condition ? await this._exec(condition) : true;
+      const goto = condition ? await this._exec(condition, options) : true;
 
       if (goto) {
-        this.nextStep = this.nodes.get(to);
+        this.nextStep = this.nodes.get(to) ?? 0;
         this.iteractionCount += 1;
         break;
       }
@@ -412,10 +442,10 @@ export default class Runnable {
   }
 
   async iterate(iteration?: Iteration) {
-    if (!iteration) iteration = this.iterator.next();
+    if (!iteration) iteration = this.iterator!.next();
 
     if (!iteration.done) {
-      const { step, type, fnc, key, options } = iteration.value;
+      const { step, type, fnc, key, options } = iteration.value ?? {};
 
       await this.tracer.startActiveSpan(
         `${this.name}:${type}${options?.name ? `:${options?.name}` : ""}`,
@@ -434,13 +464,13 @@ export default class Runnable {
               case StepType.END:
                 break;
               case StepType.PIPE:
-                await this._pipe(step);
+                await this._pipe(step, options);
                 break;
               case StepType.ASSIGN:
-                await this._assign(step, fnc);
+                await this._assign(step, fnc, options);
                 break;
               case StepType.PASSTHROUGH:
-                await this._passThrough(step);
+                await this._passThrough(step, options);
                 break;
               case StepType.BRANCH:
                 await this._branch(step, options);
@@ -449,13 +479,14 @@ export default class Runnable {
                 await this._parallel(step, options);
                 break;
               case StepType.LOOP:
-                await this._loop(step, key);
+                if (!key) throw new Error("Loop key is required");
+                await this._loop(step, key, options);
                 break;
               case StepType.PICK:
                 await this._pick(step);
                 break;
               case StepType.GOTO:
-                await this._go(step);
+                await this._go(step, options);
                 break;
               default:
                 throw new Error("Invalid step type");
@@ -467,9 +498,11 @@ export default class Runnable {
             }
             this.emitStep(type, options);
 
-            await this.iterate(this.iterator.next());
+            await this.iterate(this.iterator!.next());
           } catch (ex) {
-            span.recordException(ex);
+            if (ex instanceof Error) {
+              span.recordException(ex);
+            }
             span.setStatus({ code: SpanStatusCode.ERROR });
             throw ex;
           } finally {
@@ -481,7 +514,7 @@ export default class Runnable {
   }
 
   private clone(state: object = {}, params: RunnableParams = {}): Runnable {
-    const stato = structuredClone({ ...this.state, ...state });
+    const stato = structuredClone(merge(this.state, state));
     const options: RunnableParams = {
       runId: params.runId,
       name: params.name ?? this.name,
@@ -503,25 +536,29 @@ export default class Runnable {
     const startTime = new Date().getTime();
     const rnb = this.clone(state, params);
 
-    return rnb.getTracer().startActiveSpan(this.name, async (span: Span) => {
-      rnb.setSpanAttr(span);
-      try {
-        await rnb.iterate();
-        return rnb.getState();
-      } catch (ex) {
-        span.recordException(ex);
-        span.setStatus({ code: SpanStatusCode.ERROR });
-        throw ex;
-      } finally {
-        const endTime = new Date().getTime();
-        const executionTime = endTime - startTime;
-        rnb.runDuration.record(executionTime);
-        span.end();
-      }
-    });
+    return rnb
+      .getTracer()
+      .startActiveSpan(this.name ?? "runnable", async (span: Span) => {
+        rnb.setSpanAttr(span);
+        try {
+          await rnb.iterate();
+          return rnb.getState();
+        } catch (ex) {
+          if (ex instanceof Error) {
+            span.recordException(ex);
+          }
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw ex;
+        } finally {
+          const endTime = new Date().getTime();
+          const executionTime = endTime - startTime;
+          rnb.runDuration.record(executionTime);
+          span.end();
+        }
+      });
   }
 
-  stream(params: RunnableParams = {}): Transform {
+  stream(params: RunnableParams = {}): StreamTransformer {
     return mapper(
       (state?: object) => this.run(state, params),
       params.highWaterMark ?? 16

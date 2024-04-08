@@ -1,5 +1,5 @@
 import EventEmitter from "node:events";
-import { Span, Tracer, Context } from "@opentelemetry/api";
+import { z } from "zod";
 import Runnable from "./index.js";
 
 export { Runnable };
@@ -27,6 +27,7 @@ export type StepOptions = {
   name?: string;
   tags?: string[];
   processAll?: boolean;
+  schema?: z.ZodType;
 };
 
 export type Roote = { to: string; if?: Function };
@@ -76,6 +77,10 @@ export type RunnableParams = {
   context?: any;
   runId?: string;
 };
+
+export type StreamTransformer = (
+  iterator: any
+) => AsyncGenerator<any, void, unknown>;
 
 export interface RunFncInterface {
   (

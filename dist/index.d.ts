@@ -1,9 +1,8 @@
 /// <reference types="node" resolution-mode="require"/>
-/// <reference types="node" resolution-mode="require"/>
 import EventEmitter from "node:events";
-import { Transform } from "node:stream";
+import { z } from "zod";
 import { Tracer, Meter } from "@opentelemetry/api";
-import { SwitchCase, StepOptions, Roote, StepEvent, Iteration, IteratorFunction, RunnableParams } from "./types.js";
+import { SwitchCase, StepOptions, Roote, StepEvent, Iteration, IteratorFunction, StreamTransformer, RunnableParams } from "./types.js";
 export default class Runnable {
     private name?;
     private state;
@@ -33,7 +32,7 @@ export default class Runnable {
     pipe(fnc: Function | Runnable, options?: StepOptions): Runnable;
     assign(key: string | object, fnc?: Function | StepOptions, options?: StepOptions): Runnable;
     passThrough(fnc: Function, options?: StepOptions): Runnable;
-    pick(keys: string | string[], options?: StepOptions): Runnable;
+    pick(keys: string | string[] | z.ZodType, options?: StepOptions): Runnable;
     branch(fnc: SwitchCase[], options?: StepOptions): Runnable;
     branchAll(fnc: SwitchCase[], options?: StepOptions): Runnable;
     parallel(fncs: (Function | Runnable)[], options?: StepOptions): Runnable;
@@ -58,7 +57,7 @@ export default class Runnable {
     iterate(iteration?: Iteration): Promise<void>;
     private clone;
     run(state?: object, params?: RunnableParams): Promise<object>;
-    stream(params?: RunnableParams): Transform;
+    stream(params?: RunnableParams): StreamTransformer;
     streamLog(state?: object, params?: RunnableParams): AsyncGenerator<StepEvent>;
     static from(steps: any[], params?: RunnableParams): Runnable;
     static init(params?: RunnableParams): Runnable;
