@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.3](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.2%0Dv1.6.3) (2024-04-08)
+
+
+### Others
+
+* zod schema input ([d3715a6](https://github.com/ttessarolo/runnable/commits/d3715a65f2b6a1785272ed1393e9e642f505bd75))
+
 ### [1.6.2](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.1%0Dv1.6.2) (2024-04-08)
 
 
