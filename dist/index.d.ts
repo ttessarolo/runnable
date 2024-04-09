@@ -20,6 +20,7 @@ export default class Runnable {
     private runDuration;
     private runId;
     private aborted;
+    private circuit?;
     private constructor();
     getState(): object;
     getEmitter(): EventEmitter;
@@ -59,6 +60,7 @@ export default class Runnable {
     private emitStep;
     iterate(iteration?: Iteration): Promise<void>;
     private clone;
+    invoke(state?: object, params?: RunnableParams): Promise<object>;
     run(state?: object, params?: RunnableParams): Promise<object>;
     stream(params?: RunnableParams): StreamTransformer;
     streamLog(state?: object, params?: RunnableParams): AsyncGenerator<StepEvent>;

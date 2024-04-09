@@ -82,7 +82,7 @@ export interface RunFncInterface {
     }): Promise<object>;
 }
 export interface WrapOptions {
-    fallback?: Promise<any>;
+    fallback?: Function | Runnable;
     cache?: {
         active: boolean | Promise<any>;
         cacheKeyStrategy?: Promise<any> | z.ZodType;
@@ -103,4 +103,7 @@ export interface WrapOptions {
     };
     bulkhead?: number;
     timeout?: number;
+}
+export declare class IteratorError extends Error {
+    constructor(message: string);
 }

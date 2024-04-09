@@ -13,7 +13,7 @@ import { ConsecutiveBreaker, SamplingBreaker, ExponentialBackoff, TimeoutStrateg
 // https://github.com/genesys/mollitia
 // https://github.com/Diplomatiq/resily
 import { isFunc } from "./utils.js";
-import { StepType } from "./types.js";
+import { StepType, IteratorError } from "./types.js";
 export default class Runnable {
     name;
     state;
@@ -31,6 +31,7 @@ export default class Runnable {
     runDuration;
     runId;
     aborted = false;
+    circuit;
     constructor(state, params = {}) {
         this.name = params.name;
         this.state = state;
@@ -42,6 +43,7 @@ export default class Runnable {
         this.context = params.context ?? this;
         this.runId = params.runId ?? uuidv4();
         this.subEvents.forEach((event) => this.emitter.on(event.name, event.listener));
+        this.circuit = params.circuit;
         this.iterator = this.stepsIterator();
         this.tracer = trace.getTracer("runnable:tracer");
         this.meter = metrics.getMeter("runnable:meter");
@@ -75,7 +77,10 @@ export default class Runnable {
     wrapFnc(fnc, options) {
         const policies = [];
         if (options?.fallback) {
-            policies.push(fallback(handleAll, options.fallback));
+            policies.push(fallback(handleAll, () => this._exec(options.fallback)));
+        }
+        if (options?.timeout) {
+            policies.push(timeout(options.timeout, TimeoutStrategy.Cooperative));
         }
         if (options?.retry) {
             let maxAttempts;
@@ -89,10 +94,17 @@ export default class Runnable {
                 maxDelay = options.retry.maxDelay;
                 initialDelay = options.retry.initialDelay;
             }
-            policies.push(retry(handleAll, {
+            const riprova = retry(handleAll, {
                 maxAttempts,
                 backoff: new ExponentialBackoff({ initialDelay, maxDelay })
-            }));
+            });
+            riprova.onFailure(({ reason }) => {
+                // Step Back if the error is in the iterator
+                if (reason.error instanceof IteratorError) {
+                    this.nextStep = this.nextStep - 1;
+                }
+            });
+            policies.push(riprova);
             policies.push(circuitBreaker(handleAll, {
                 halfOpenAfter: options.circuitBreaker?.halfOpenAfter ?? 10 * 1000,
                 breaker: options.circuitBreaker?.consecutiveFaillures
@@ -105,19 +117,16 @@ export default class Runnable {
         }
         if (options?.bulkhead)
             policies.push(bulkhead(options.bulkhead));
-        if (options?.timeout) {
-            policies.push(timeout(options.timeout, TimeoutStrategy.Cooperative));
-        }
         const wrapper = policies.length > 0 && wrap(...policies);
         const _this = this;
         return async function (...args) {
             if (!wrapper)
                 return await fnc.call(_this, ...args);
             return await wrapper.execute((opts) => {
-                opts.signal.addEventListener("abort", () => {
-                    _this.aborted = opts.signal.reason;
-                    _this.nextStep = _this.steps.length - 1;
-                });
+                // opts.signal.addEventListener("abort", () => {
+                //   _this.aborted = opts.signal.reason;
+                //   _this.nextStep = _this.steps.length - 1;
+                // });
                 return fnc.call(_this, ...args);
             });
         };
@@ -466,7 +475,7 @@ export default class Runnable {
                         span.recordException(ex);
                     }
                     span.setStatus({ code: SpanStatusCode.ERROR });
-                    throw ex;
+                    throw new IteratorError(ex instanceof Error ? ex.message : "Iterator Error");
                 }
                 finally {
                     span.end();
@@ -484,11 +493,15 @@ export default class Runnable {
             nodes: params.nodes ?? this.nodes,
             steps: params.steps ?? this.steps,
             subEvents: params.subEvents ?? this.subEvents,
-            context: this.context
+            context: this.context,
+            circuit: params.circuit ?? this.circuit
         };
         const runnable = new Runnable(stato, options);
         runnable.checkEnd();
         return runnable;
+    }
+    async invoke(state, params = {}) {
+        return this.run(state, params);
     }
     async run(state, params = {}) {
         const startTime = new Date().getTime();
@@ -498,8 +511,9 @@ export default class Runnable {
             .startActiveSpan(this.name ?? "runnable", async (span) => {
             rnb.setSpanAttr(span);
             try {
-                const wrapped = this.wrapFnc(this.iterate.bind(rnb), params.circuit);
-                await wrapped();
+                const wrappedIterate = rnb.wrapFnc(rnb.iterate, //.bind(rnb)
+                params.circuit ?? rnb.circuit);
+                await wrappedIterate();
                 return rnb.getState();
             }
             catch (ex) {

@@ -17,6 +17,7 @@ import {
 } from "@opentelemetry/api";
 import {
   IDefaultPolicyContext,
+  FailureReason,
   ConsecutiveBreaker,
   SamplingBreaker,
   ExponentialBackoff,
@@ -47,7 +48,8 @@ import {
   StreamTransformer,
   EventType,
   RunnableParams,
-  WrapOptions
+  WrapOptions,
+  IteratorError
 } from "./types.js";
 
 export default class Runnable {
@@ -67,6 +69,7 @@ export default class Runnable {
   private runDuration: Histogram;
   private runId: string;
   private aborted: boolean = false;
+  private circuit?: WrapOptions;
 
   private constructor(state: object, params: RunnableParams = {}) {
     this.name = params.name;
@@ -81,6 +84,7 @@ export default class Runnable {
     this.subEvents.forEach((event: EventType) =>
       this.emitter.on(event.name, event.listener)
     );
+    this.circuit = params.circuit;
 
     this.iterator = this.stepsIterator();
     this.tracer = trace.getTracer("runnable:tracer");
@@ -125,7 +129,10 @@ export default class Runnable {
     const policies: any[] = [];
 
     if (options?.fallback) {
-      policies.push(fallback(handleAll, options.fallback));
+      policies.push(fallback(handleAll, () => this._exec(options.fallback!)));
+    }
+    if (options?.timeout) {
+      policies.push(timeout(options.timeout, TimeoutStrategy.Cooperative));
     }
     if (options?.retry) {
       let maxAttempts;
@@ -139,13 +146,18 @@ export default class Runnable {
         maxDelay = options.retry.maxDelay;
         initialDelay = options.retry.initialDelay;
       }
+      const riprova = retry(handleAll, {
+        maxAttempts,
+        backoff: new ExponentialBackoff({ initialDelay, maxDelay })
+      });
 
-      policies.push(
-        retry(handleAll, {
-          maxAttempts,
-          backoff: new ExponentialBackoff({ initialDelay, maxDelay })
-        })
-      );
+      riprova.onFailure(({ reason }: any) => {
+        // Step Back if the error is in the iterator
+        if (reason.error instanceof IteratorError) {
+          this.nextStep = this.nextStep - 1;
+        }
+      });
+      policies.push(riprova);
 
       policies.push(
         circuitBreaker(handleAll, {
@@ -162,9 +174,6 @@ export default class Runnable {
       );
     }
     if (options?.bulkhead) policies.push(bulkhead(options.bulkhead));
-    if (options?.timeout) {
-      policies.push(timeout(options.timeout, TimeoutStrategy.Cooperative));
-    }
 
     const wrapper = policies.length > 0 && wrap(...policies);
     const _this = this;
@@ -173,10 +182,10 @@ export default class Runnable {
       if (!wrapper) return await fnc.call(_this, ...args);
 
       return await wrapper.execute((opts: IDefaultPolicyContext) => {
-        opts.signal.addEventListener("abort", () => {
-          _this.aborted = opts.signal.reason;
-          _this.nextStep = _this.steps.length - 1;
-        });
+        // opts.signal.addEventListener("abort", () => {
+        //   _this.aborted = opts.signal.reason;
+        //   _this.nextStep = _this.steps.length - 1;
+        // });
         return fnc.call(_this, ...args);
       });
     };
@@ -601,7 +610,9 @@ export default class Runnable {
               span.recordException(ex);
             }
             span.setStatus({ code: SpanStatusCode.ERROR });
-            throw ex;
+            throw new IteratorError(
+              ex instanceof Error ? ex.message : "Iterator Error"
+            );
           } finally {
             span.end();
           }
@@ -620,7 +631,8 @@ export default class Runnable {
       nodes: params.nodes ?? this.nodes,
       steps: params.steps ?? this.steps,
       subEvents: params.subEvents ?? this.subEvents,
-      context: this.context
+      context: this.context,
+      circuit: params.circuit ?? this.circuit
     };
 
     const runnable = new Runnable(stato, options);
@@ -642,8 +654,11 @@ export default class Runnable {
       .startActiveSpan(this.name ?? "runnable", async (span: Span) => {
         rnb.setSpanAttr(span);
         try {
-          const wrapped = this.wrapFnc(this.iterate.bind(rnb), params.circuit);
-          await wrapped();
+          const wrappedIterate = rnb.wrapFnc(
+            rnb.iterate, //.bind(rnb)
+            params.circuit ?? rnb.circuit
+          );
+          await wrappedIterate();
           return rnb.getState();
         } catch (ex) {
           if (ex instanceof Error) {
