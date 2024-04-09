@@ -7,7 +7,11 @@ import merge from "lodash.merge";
 import get from "lodash.get";
 import set from "lodash.set";
 import { metrics, trace, SpanStatusCode } from "@opentelemetry/api";
-import { ConsecutiveBreaker, ExponentialBackoff, retry, handleAll, circuitBreaker, wrap } from "cockatiel";
+import { ConsecutiveBreaker, SamplingBreaker, ExponentialBackoff, TimeoutStrategy, circuitBreaker, retry, timeout, bulkhead, fallback, handleAll, wrap } from "cockatiel";
+//https://github.com/App-vNext/Polly/wiki/PolicyWrap
+// Others
+// https://github.com/genesys/mollitia
+// https://github.com/Diplomatiq/resily
 import { isFunc } from "./utils.js";
 import { StepType } from "./types.js";
 export default class Runnable {
@@ -26,6 +30,7 @@ export default class Runnable {
     meter;
     runDuration;
     runId;
+    aborted = false;
     constructor(state, params = {}) {
         this.name = params.name;
         this.state = state;
@@ -67,31 +72,69 @@ export default class Runnable {
     emit(event, ...args) {
         return this.emitter.emit(event, ...args);
     }
-    wrapFnc(step) {
+    wrapFnc(fnc, options) {
+        const policies = [];
+        if (options?.fallback) {
+            policies.push(fallback(handleAll, options.fallback));
+        }
+        if (options?.retry) {
+            let maxAttempts;
+            let maxDelay;
+            let initialDelay;
+            if (typeof options.retry === "number") {
+                maxAttempts = options.retry;
+            }
+            else {
+                maxAttempts = options.retry.maxAttempts;
+                maxDelay = options.retry.maxDelay;
+                initialDelay = options.retry.initialDelay;
+            }
+            policies.push(retry(handleAll, {
+                maxAttempts,
+                backoff: new ExponentialBackoff({ initialDelay, maxDelay })
+            }));
+            policies.push(circuitBreaker(handleAll, {
+                halfOpenAfter: options.circuitBreaker?.halfOpenAfter ?? 10 * 1000,
+                breaker: options.circuitBreaker?.consecutiveFaillures
+                    ? new ConsecutiveBreaker(options.circuitBreaker?.consecutiveFaillures)
+                    : new SamplingBreaker({
+                        threshold: options.circuitBreaker?.threshold ?? 0.2,
+                        duration: options.circuitBreaker?.duration ?? 15 * 1000
+                    })
+            }));
+        }
+        if (options?.bulkhead)
+            policies.push(bulkhead(options.bulkhead));
+        if (options?.timeout) {
+            policies.push(timeout(options.timeout, TimeoutStrategy.Cooperative));
+        }
+        const wrapper = policies.length > 0 && wrap(...policies);
+        const _this = this;
+        return async function (...args) {
+            if (!wrapper)
+                return await fnc.call(_this, ...args);
+            return await wrapper.execute((opts) => {
+                opts.signal.addEventListener("abort", () => {
+                    _this.aborted = opts.signal.reason;
+                    _this.nextStep = _this.steps.length - 1;
+                });
+                return fnc.call(_this, ...args);
+            });
+        };
+    }
+    wrapStepFncs(step) {
         // Skip wrapping loop chain functions
         if (step.type === StepType.LOOP)
             return;
         for (const key of ["step", "fnc"]) {
             if (step[key] instanceof Function) {
-                const policies = [];
-                policies.push(retry(handleAll, {
-                    maxAttempts: 3,
-                    backoff: new ExponentialBackoff()
-                }));
-                policies.push(circuitBreaker(handleAll, {
-                    halfOpenAfter: 10 * 1000,
-                    breaker: new ConsecutiveBreaker(5)
-                }));
-                const wrapper = wrap(...policies);
                 const fnc = step[key];
-                step[key] = async function (...args) {
-                    return await wrapper.execute(() => fnc.call(this, ...args));
-                };
+                step[key] = this.wrapFnc(fnc, step.options?.circuit);
             }
         }
     }
     setStep(step) {
-        this.wrapFnc(step);
+        this.wrapStepFncs(step);
         const length = this.steps.push(step);
         if (step.options?.name)
             this.nodes.set(step.options?.name, length - 1);
@@ -455,7 +498,8 @@ export default class Runnable {
             .startActiveSpan(this.name ?? "runnable", async (span) => {
             rnb.setSpanAttr(span);
             try {
-                await rnb.iterate();
+                const wrapped = this.wrapFnc(this.iterate.bind(rnb), params.circuit);
+                await wrapped();
                 return rnb.getState();
             }
             catch (ex) {

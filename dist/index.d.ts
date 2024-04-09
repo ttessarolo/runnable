@@ -19,6 +19,7 @@ export default class Runnable {
     private meter;
     private runDuration;
     private runId;
+    private aborted;
     private constructor();
     getState(): object;
     getEmitter(): EventEmitter;
@@ -28,6 +29,7 @@ export default class Runnable {
     on(event: string | symbol, fnc: Function): Runnable;
     emit(event: string | symbol, ...args: any[]): boolean;
     private wrapFnc;
+    private wrapStepFncs;
     private setStep;
     milestone(name: string): Runnable;
     pipe(fnc: Function | Runnable, options?: StepOptions): Runnable;

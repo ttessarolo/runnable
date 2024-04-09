@@ -25,6 +25,7 @@ export type StepOptions = {
     tags?: string[];
     processAll?: boolean;
     schema?: z.ZodType;
+    circuit?: WrapOptions;
 };
 export type Roote = {
     to: string;
@@ -72,10 +73,34 @@ export type RunnableParams = {
     highWaterMark?: number;
     context?: any;
     runId?: string;
+    circuit?: WrapOptions;
 };
 export type StreamTransformer = (iterator: any) => AsyncGenerator<any, void, unknown>;
 export interface RunFncInterface {
     (state: object, params: {
         emit: (arg1: string | symbol, arg2: any) => void;
     }): Promise<object>;
+}
+export interface WrapOptions {
+    fallback?: Promise<any>;
+    cache?: {
+        active: boolean | Promise<any>;
+        cacheKeyStrategy?: Promise<any> | z.ZodType;
+        ttlStrategy?: number | Promise<any>;
+        timeout?: number;
+    };
+    retry?: {
+        maxAttempts: number;
+        maxDelay?: number;
+        initialDelay?: number;
+    } | number;
+    circuitBreaker?: {
+        halfOpenAfter?: number;
+        consecutiveFaillures?: number;
+        threshold?: number;
+        duration?: number;
+        minimumRps?: number;
+    };
+    bulkhead?: number;
+    timeout?: number;
 }
