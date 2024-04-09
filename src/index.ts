@@ -178,16 +178,9 @@ export default class Runnable {
     const wrapper = policies.length > 0 && wrap(...policies);
     const _this = this;
 
-    return async function (...args: unknown[]) {
-      if (!wrapper) return await fnc.call(_this, ...args);
-
-      return await wrapper.execute((opts: IDefaultPolicyContext) => {
-        // opts.signal.addEventListener("abort", () => {
-        //   _this.aborted = opts.signal.reason;
-        //   _this.nextStep = _this.steps.length - 1;
-        // });
-        return fnc.call(_this, ...args);
-      });
+    return async function () {
+      if (!wrapper) return _this._exec(fnc);
+      return await wrapper.execute(() => _this._exec(fnc));
     };
   }
 

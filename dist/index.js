@@ -127,7 +127,7 @@ export default class Runnable {
                 //   _this.aborted = opts.signal.reason;
                 //   _this.nextStep = _this.steps.length - 1;
                 // });
-                return fnc.call(_this, ...args);
+                return _this._exec(fnc); //fnc.call(_this, ...args);
             });
         };
     }
