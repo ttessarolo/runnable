@@ -2,7 +2,7 @@ import { Readable, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
-import "./instrumentation.js";
+import "./utils/instrumentation.js";
 
 interface State {
   a: number;

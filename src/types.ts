@@ -7,6 +7,7 @@ export { Runnable };
 export enum StepType {
   START = "start",
   PIPE = "pipe",
+  PUSH = "push",
   ASSIGN = "assign",
   PASSTHROUGH = "passThrough",
   PICK = "pick",
@@ -27,6 +28,7 @@ export type StepOptions = {
   name?: string;
   tags?: string[];
   processAll?: boolean;
+  mode?: "pipe" | "push";
   schema?: z.ZodType;
   circuit?: WrapOptions;
 };

@@ -34,6 +34,7 @@ export default class Runnable {
     private setStep;
     milestone(name: string): Runnable;
     pipe(fnc: Function | Runnable, options?: StepOptions): Runnable;
+    push(fnc: Function | Runnable, options?: StepOptions): Runnable;
     assign(key: string | object, fnc?: Function | StepOptions, options?: StepOptions): Runnable;
     passThrough(fnc: Function, options?: StepOptions): Runnable;
     pick(keys: string | string[] | z.ZodType, options?: StepOptions): Runnable;
@@ -49,6 +50,7 @@ export default class Runnable {
     private setSpanAttr;
     private _exec;
     private _pipe;
+    private _push;
     private _pick;
     private _passThrough;
     private _assign;
@@ -60,8 +62,9 @@ export default class Runnable {
     private emitStep;
     iterate(iteration?: Iteration): Promise<void>;
     private clone;
-    invoke(state?: object, params?: RunnableParams): Promise<object>;
-    run(state?: object, params?: RunnableParams): Promise<object>;
+    static isRunnable(): boolean;
+    invoke(state?: object, params?: RunnableParams): Promise<any>;
+    run(state?: object, params?: RunnableParams): Promise<any>;
     stream(params?: RunnableParams): StreamTransformer;
     streamLog(state?: object, params?: RunnableParams): AsyncGenerator<StepEvent>;
     static from(steps: any[], params?: RunnableParams): Runnable;

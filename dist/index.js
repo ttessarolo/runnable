@@ -78,9 +78,7 @@ export default class Runnable {
         const _this = this;
         const policies = [];
         if (options?.fallback) {
-            policies.push(fallback(handleAll, () => options?.avoidExec
-                ? fnc.call(_this, ...arguments)
-                : _this._exec(options.fallback)));
+            policies.push(fallback(handleAll, async () => _this._exec(options.fallback)));
         }
         if (options?.timeout) {
             policies.push(timeout(options.timeout, TimeoutStrategy.Cooperative));
@@ -101,7 +99,8 @@ export default class Runnable {
                 maxAttempts,
                 backoff: new ExponentialBackoff({ initialDelay, maxDelay })
             });
-            riprova.onFailure(({ reason }) => {
+            // TODO: Close Listeners
+            const listener = riprova.onFailure(({ reason }) => {
                 // Step Back if the error is in the iterator
                 if (reason.error instanceof IteratorError) {
                     this.nextStep = this.nextStep - 1;
@@ -121,8 +120,8 @@ export default class Runnable {
         if (options?.bulkhead)
             policies.push(bulkhead(options.bulkhead));
         if (policies.length > 0) {
-            return async function () {
-                return await wrap(...policies).execute(() => {
+            return function () {
+                return wrap(...policies).execute(() => {
                     return options?.avoidExec
                         ? fnc.call(_this, ...arguments)
                         : _this._exec(fnc);
@@ -157,6 +156,14 @@ export default class Runnable {
         this.setStep({
             step: fnc,
             type: StepType.PIPE,
+            options
+        });
+        return this;
+    }
+    push(fnc, options) {
+        this.setStep({
+            step: fnc,
+            type: StepType.PUSH,
             options
         });
         return this;
@@ -251,7 +258,7 @@ export default class Runnable {
                 context: this.context,
                 runId: this.runId
             })
-            : await this.tracer.startActiveSpan(`${this.name}:func:exec${fnc.name ? `:${fnc.name}` : ""}`, async (span) => {
+            : await this.tracer.startActiveSpan(`${this.name}:func:exec${fnc.name ? `:${fnc.name.replace("bound ", "")}` : ""}`, async (span) => {
                 this.setSpanAttr(span);
                 try {
                     if (span.isRecording()) {
@@ -280,6 +287,10 @@ export default class Runnable {
             });
     }
     async _pipe(fnc, options = {}) {
+        this.state = await this._exec(fnc, options);
+        return this;
+    }
+    async _push(fnc, options = {}) {
         const result = await this._exec(fnc, options);
         this.state = options.schema ? result : merge(this.state, result);
         return this;
@@ -340,7 +351,7 @@ export default class Runnable {
                 return merge(acc, val);
             return acc;
         }, {});
-        this.state = merge(this.state, update);
+        this.state = options.mode !== "pipe" ? merge(this.state, update) : update;
         return this;
     }
     async _parallel(fncs, options = {}) {
@@ -351,7 +362,7 @@ export default class Runnable {
                 return merge(acc, val);
             return acc;
         }, {});
-        this.state = merge(this.state, update);
+        this.state = options.mode !== "pipe" ? merge(this.state, update) : update;
         return this;
     }
     async _loop(chain, key, options = {}) {
@@ -438,6 +449,9 @@ export default class Runnable {
                         case StepType.PIPE:
                             await this._pipe(step, options);
                             break;
+                        case StepType.PUSH:
+                            await this._push(step, options);
+                            break;
                         case StepType.ASSIGN:
                             await this._assign(step, fnc, options);
                             break;
@@ -501,6 +515,9 @@ export default class Runnable {
         runnable.checkEnd();
         return runnable;
     }
+    static isRunnable() {
+        return true;
+    }
     async invoke(state, params = {}) {
         return this.run(state, params);
     }
@@ -514,8 +531,8 @@ export default class Runnable {
             try {
                 const wrappedIterate = rnb.wrapFnc(rnb.iterate, //.bind(rnb),
                 { ...(params.circuit ?? rnb.circuit), avoidExec: true });
-                await wrappedIterate();
-                return rnb.getState();
+                const fallback = await wrappedIterate();
+                return fallback ?? rnb.getState();
             }
             catch (ex) {
                 if (ex instanceof Error) {

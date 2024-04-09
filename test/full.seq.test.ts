@@ -1,7 +1,6 @@
 import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
-import "./instrumentation.js";
-import set from "lodash.set";
+import "./utils/instrumentation.js";
 
 const subSequence = Runnable.from(
   [
@@ -94,11 +93,11 @@ const processBlocks = Runnable.init({ name: "blocks:chain" }).loop({
 const main = Runnable.init({ name: "full:main:seq" })
   .assign("year", getYear, { name: "year" })
   .assign({ b: getB }, { name: "b" })
-  .pipe(setIncA, { name: "increment:a" })
+  .push(setIncA, { name: "increment:a" })
   .passThrough(doEmitCheck, { name: "emit:check" })
-  .pipe(setC, { name: "set:c" })
+  .push(setC, { name: "set:c" })
   .milestone("state:analyzed")
-  .pipe(subSequence)
+  .push(subSequence)
   .branch(
     [
       { if: A_is_1, then: subSubSequence },
@@ -120,7 +119,7 @@ const main = Runnable.init({ name: "full:main:seq" })
       { id: 2, items: [{ id: 1 }, { id: 2 }, { id: 3 }] }
     ]
   })
-  .pipe(processBlocks)
+  .push(processBlocks)
   .on("check", (msg: string) => true);
 
 test("main", async () => {

@@ -1,6 +1,6 @@
 import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
-import "./instrumentation.js";
+import "./utils/instrumentation.js";
 
 const setBlockIndex = async (state: any) => {
   state.element.index = state.index;
@@ -38,7 +38,7 @@ const processBlocks = Runnable.init({ name: "blocks:chain" }).loop({
     })
 });
 
-const main = Runnable.init({ name: "loop:seq" }).pipe(processBlocks);
+const main = Runnable.init({ name: "loop:seq" }).push(processBlocks);
 
 test("loop", async () => {
   let res;

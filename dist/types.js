@@ -4,6 +4,7 @@ export var StepType;
 (function (StepType) {
     StepType["START"] = "start";
     StepType["PIPE"] = "pipe";
+    StepType["PUSH"] = "push";
     StepType["ASSIGN"] = "assign";
     StepType["PASSTHROUGH"] = "passThrough";
     StepType["PICK"] = "pick";

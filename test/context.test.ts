@@ -1,6 +1,6 @@
 import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
-import "./instrumentation.js";
+import "./utils/instrumentation.js";
 
 const context = {
   config: {

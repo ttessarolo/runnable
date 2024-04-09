@@ -1,7 +1,7 @@
 import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
 import { z } from "zod";
-import "./instrumentation.js";
+import "./utils/instrumentation.js";
 
 const input = { name: "John", age: 30, extra: "extra" };
 const output = { name: "John", age: 30 };
@@ -20,7 +20,7 @@ test("zod:pick", async () => {
 // *********************************
 // * Zod Pipe
 // *********************************
-const pipeSeq = Runnable.init({ name: "zod:pipe:seq" }).pipe(
+const pipeSeq = Runnable.init({ name: "zod:pipe:seq" }).push(
   (state: any) => {
     state.extra = state.extra;
     return state;
@@ -37,7 +37,7 @@ test("zod:pipe", async () => {
 // * Zod Pipe Pick
 // *********************************
 const pipeAndPickSeq = Runnable.init({ name: "zod:pipe:pick:seq" })
-  .pipe((state: any) => state, { schema })
+  .push((state: any) => state, { schema })
   .pick(schema, { name: "filter:egress" });
 
 test("zod:pipe:pick", async () => {
@@ -50,7 +50,7 @@ test("zod:pipe:pick", async () => {
 // *********************************
 const pickAndPipeSeq = Runnable.init({ name: "zod:pick:pipe:seq" })
   .pick(schema, { name: "filter:ingress" })
-  .pipe((state: any) => state);
+  .push((state: any) => state);
 
 test("zod:pick:pipe", async () => {
   const state = await pickAndPipeSeq.run(input);
