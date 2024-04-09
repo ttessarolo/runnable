@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.8](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.7%0Dv1.6.8) (2024-04-09)
+
+
+### Others
+
+* _exec wrapped func and fallbacks ([01cfa25](https://github.com/ttessarolo/runnable/commits/01cfa251e8d0ccbae694881403b8f6db840db71b))
+
 ### [1.6.7](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.6%0Dv1.6.7) (2024-04-09)
 
 
