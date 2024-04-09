@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.10](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.9%0Dv1.6.10) (2024-04-09)
+
+
+### Tests
+
+* operators test + goto test ([ad11d42](https://github.com/ttessarolo/runnable/commits/ad11d42fa8fc2d04108eb07de7d0b3c030581f3d))
+
 ### [1.6.9](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.8%0Dv1.6.9) (2024-04-09)
 
 
