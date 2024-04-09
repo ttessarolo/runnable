@@ -82,6 +82,7 @@ export interface RunFncInterface {
     }): Promise<object>;
 }
 export interface WrapOptions {
+    avoidExec?: boolean;
     fallback?: Function | Runnable;
     cache?: {
         active: boolean | Promise<any>;

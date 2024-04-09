@@ -75,9 +75,12 @@ export default class Runnable {
         return this.emitter.emit(event, ...args);
     }
     wrapFnc(fnc, options) {
+        const _this = this;
         const policies = [];
         if (options?.fallback) {
-            policies.push(fallback(handleAll, () => this._exec(options.fallback)));
+            policies.push(fallback(handleAll, () => options?.avoidExec
+                ? fnc.call(_this, ...arguments)
+                : _this._exec(options.fallback)));
         }
         if (options?.timeout) {
             policies.push(timeout(options.timeout, TimeoutStrategy.Cooperative));
@@ -117,19 +120,17 @@ export default class Runnable {
         }
         if (options?.bulkhead)
             policies.push(bulkhead(options.bulkhead));
-        const wrapper = policies.length > 0 && wrap(...policies);
-        const _this = this;
-        return async function (...args) {
-            if (!wrapper)
-                return await fnc.call(_this, ...args);
-            return await wrapper.execute((opts) => {
-                // opts.signal.addEventListener("abort", () => {
-                //   _this.aborted = opts.signal.reason;
-                //   _this.nextStep = _this.steps.length - 1;
-                // });
-                return _this._exec(fnc); //fnc.call(_this, ...args);
-            });
-        };
+        if (policies.length > 0) {
+            return async function () {
+                return await wrap(...policies).execute(() => {
+                    return options?.avoidExec
+                        ? fnc.call(_this, ...arguments)
+                        : _this._exec(fnc);
+                });
+            };
+        }
+        else
+            return fnc.bind(this);
     }
     wrapStepFncs(step) {
         // Skip wrapping loop chain functions
@@ -511,8 +512,8 @@ export default class Runnable {
             .startActiveSpan(this.name ?? "runnable", async (span) => {
             rnb.setSpanAttr(span);
             try {
-                const wrappedIterate = rnb.wrapFnc(rnb.iterate, //.bind(rnb)
-                params.circuit ?? rnb.circuit);
+                const wrappedIterate = rnb.wrapFnc(rnb.iterate, //.bind(rnb),
+                { ...(params.circuit ?? rnb.circuit), avoidExec: true });
                 await wrappedIterate();
                 return rnb.getState();
             }

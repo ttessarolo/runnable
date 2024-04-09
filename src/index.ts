@@ -126,10 +126,17 @@ export default class Runnable {
   }
 
   private wrapFnc(fnc: Function, options?: WrapOptions): Function {
+    const _this = this;
     const policies: any[] = [];
 
     if (options?.fallback) {
-      policies.push(fallback(handleAll, () => this._exec(options.fallback!)));
+      policies.push(
+        fallback(handleAll, () =>
+          options?.avoidExec
+            ? fnc.call(_this, ...arguments)
+            : _this._exec(options.fallback!)
+        )
+      );
     }
     if (options?.timeout) {
       policies.push(timeout(options.timeout, TimeoutStrategy.Cooperative));
@@ -175,13 +182,15 @@ export default class Runnable {
     }
     if (options?.bulkhead) policies.push(bulkhead(options.bulkhead));
 
-    const wrapper = policies.length > 0 && wrap(...policies);
-    const _this = this;
-
-    return async function () {
-      if (!wrapper) return _this._exec(fnc);
-      return await wrapper.execute(() => _this._exec(fnc));
-    };
+    if (policies.length > 0) {
+      return async function () {
+        return await wrap(...policies).execute(() => {
+          return options?.avoidExec
+            ? fnc.call(_this, ...arguments)
+            : _this._exec(fnc);
+        });
+      };
+    } else return fnc.bind(this);
   }
 
   private wrapStepFncs(step: Step) {
@@ -542,7 +551,6 @@ export default class Runnable {
 
   async iterate(iteration?: Iteration) {
     if (!iteration) iteration = this.iterator!.next();
-
     if (!iteration.done) {
       const { step, type, fnc, key, options } = iteration.value ?? {};
 
@@ -648,8 +656,8 @@ export default class Runnable {
         rnb.setSpanAttr(span);
         try {
           const wrappedIterate = rnb.wrapFnc(
-            rnb.iterate, //.bind(rnb)
-            params.circuit ?? rnb.circuit
+            rnb.iterate, //.bind(rnb),
+            { ...(params.circuit ?? rnb.circuit), avoidExec: true }
           );
           await wrappedIterate();
           return rnb.getState();
