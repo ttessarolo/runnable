@@ -12,7 +12,8 @@ import { ConsecutiveBreaker, SamplingBreaker, ExponentialBackoff, TimeoutStrateg
 // Others
 // https://github.com/genesys/mollitia
 // https://github.com/Diplomatiq/resily
-import { isFunc } from "./utils.js";
+import { isExecutable, isFunc } from "./utils.js";
+import Cache from "./cache.js";
 import { StepType, IteratorError } from "./types.js";
 export default class Runnable {
     name;
@@ -31,6 +32,7 @@ export default class Runnable {
     runDuration;
     runId;
     aborted = false;
+    wrappedFncs = 0;
     circuit;
     constructor(state, params = {}) {
         this.name = params.name;
@@ -62,6 +64,9 @@ export default class Runnable {
     getMeter() {
         return this.meter;
     }
+    getWrappedCount() {
+        return this.wrappedFncs;
+    }
     checkEnd() {
         if (this.steps.at(-1)?.type !== StepType.END) {
             this.setStep({ type: StepType.END });
@@ -75,8 +80,11 @@ export default class Runnable {
         return this.emitter.emit(event, ...args);
     }
     wrapFnc(fnc, options) {
+        if (!options)
+            return fnc;
         const _this = this;
         const policies = [];
+        const cache = new Cache({ prefix: this.name, name: fnc.name }, this.state, options, this.emitter);
         if (options?.fallback) {
             policies.push(fallback(handleAll, async () => _this._exec(options.fallback)));
         }
@@ -121,28 +129,68 @@ export default class Runnable {
             policies.push(bulkhead(options.bulkhead));
         if (policies.length > 0) {
             return async function () {
-                const results = await wrap(...policies).execute(() => {
-                    return options?.avoidExec
-                        ? fnc.call(_this, ...arguments)
-                        : _this._exec(fnc);
-                });
-                return results;
+                const R = (await cache.get()) ??
+                    (await wrap(...policies).execute(() => {
+                        return options?.avoidExec
+                            ? fnc.call(_this, ...arguments)
+                            : _this._exec(fnc);
+                    }));
+                await cache.set(R);
+                return R;
             };
         }
         else
             return async function () {
-                const results = await fnc.call(_this, ...arguments);
-                return results;
+                const R = (await cache.get()) ?? (await fnc.call(_this, ...arguments));
+                await cache.set(R);
+                return R;
             };
     }
     wrapStepFncs(step) {
         // Skip wrapping loop chain functions
-        if (step.type === StepType.LOOP)
+        if ([
+            StepType.START,
+            StepType.END,
+            StepType.MILESTONE,
+            StepType.LOOP
+        ].includes(step.type))
             return;
-        for (const key of ["step", "fnc"]) {
-            if (step[key] instanceof Function) {
-                const fnc = step[key];
-                step[key] = this.wrapFnc(fnc, step.options?.circuit);
+        if (step.type === StepType.ASSIGN) {
+            Object.entries(step.step).forEach(([key, fnc]) => {
+                if (isFunc(fnc)) {
+                    step.step[key] = this.wrapFnc(fnc, step.options?.circuit);
+                    this.wrappedFncs += 1;
+                }
+            });
+        }
+        else if (step.type === StepType.PARALLEL) {
+            for (const fnc of step.step) {
+                if (isFunc(fnc)) {
+                    const index = step.step.indexOf(fnc);
+                    step.step[index] = this.wrapFnc(fnc, step.options?.circuit);
+                    this.wrappedFncs += 1;
+                }
+            }
+        }
+        else if ([StepType.BRANCH, StepType.GOTO].includes(step.type)) {
+            for (const roads of step.step) {
+                if (isFunc(roads.then)) {
+                    roads.then = this.wrapFnc(roads.then, step.options?.circuit);
+                    this.wrappedFncs += 1;
+                }
+                if (isFunc(roads.if)) {
+                    roads.if = this.wrapFnc(roads.if, step.options?.circuit);
+                    this.wrappedFncs += 1;
+                }
+            }
+        }
+        else {
+            for (const key of ["step", "fnc"]) {
+                if (isFunc(step[key])) {
+                    const fnc = step[key];
+                    step[key] = this.wrapFnc(fnc, step.options?.circuit);
+                    this.wrappedFncs += 1;
+                }
             }
         }
     }
@@ -238,7 +286,7 @@ export default class Runnable {
     }
     go(rootes, options) {
         this.setStep({
-            step: rootes,
+            step: Array.isArray(rootes) ? rootes : [rootes],
             type: StepType.GOTO,
             options
         });
@@ -335,7 +383,7 @@ export default class Runnable {
             const keys = [];
             for (const [k, objFnc] of Object.entries(key)) {
                 keys.push(k);
-                if (isFunc(objFnc))
+                if (isExecutable(objFnc))
                     execs.push(this._exec(objFnc, options));
                 else
                     execs.push(Promise.resolve(objFnc));
@@ -396,8 +444,7 @@ export default class Runnable {
         return this;
     }
     async _go(rootes, options = {}) {
-        const roots = Array.isArray(rootes) ? rootes : [rootes];
-        for (const root of roots) {
+        for (const root of rootes) {
             const { to, if: condition } = root;
             if (!this.nodes.has(to))
                 throw new Error(`GoTo: Node ${to} not found`);
@@ -507,6 +554,7 @@ export default class Runnable {
                 }
             });
         }
+        return this.state;
     }
     clone(state = {}, params = {}) {
         const stato = structuredClone(merge(this.state, state));
@@ -539,7 +587,7 @@ export default class Runnable {
             .startActiveSpan(this.name ?? "runnable", async (span) => {
             rnb.setSpanAttr(span);
             try {
-                const wrappedIterate = rnb.wrapFnc(rnb.iterate, //.bind(rnb),
+                const wrappedIterate = await rnb.wrapFnc(rnb.iterate, //.bind(rnb),
                 { ...(params.circuit ?? rnb.circuit), avoidExec: true });
                 const fallback = await wrappedIterate();
                 return fallback ?? rnb.getState();
@@ -573,7 +621,7 @@ export default class Runnable {
     static from(steps, params = {}) {
         const r = new Runnable({}, params);
         for (const step of steps) {
-            if (isFunc(step))
+            if (isExecutable(step))
                 r.pipe(step);
             if (typeof step === "object")
                 r.assign(step);

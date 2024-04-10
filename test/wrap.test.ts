@@ -8,7 +8,7 @@ let r0 = 0;
 const m0 = Runnable.init({
   name: "wrap:main:seq",
   circuit: { retry: 3 }
-}).push(function throwError() {
+}).push(function throwError(): never {
   throw new Error(`Error ${++r0}`);
 });
 
@@ -23,7 +23,7 @@ let r1 = 0;
 const m1 = Runnable.init({
   name: "wrap:main:seq"
 }).push(
-  function throwError() {
+  function throwError(): never {
     throw new Error(`Error ${++r1}`);
   },
   { circuit: { retry: 3 } }
@@ -190,7 +190,135 @@ test("wrap:retry:pipe:breaker:ko:fallback:runnable:onseq", async () => {
       "Execution prevented because the circuit breaker is open"
     );
   });
-  console.log(result);
   expect(result).toEqual({ fallback: "hallo" });
   expect(r8).toEqual(2);
+});
+
+test("assign:seq", async () => {
+  let errors = 0;
+  const seq = Runnable.init({ name: "wrap:assign:seq" }).assign(
+    {
+      a: function setA(state: any) {
+        errors++;
+        if (errors < 3) throw new Error("Error");
+        return 1;
+      },
+      b: 2
+    },
+    { name: "set:ab", circuit: { retry: 2 } }
+  );
+  const wrapped = seq.getWrappedCount();
+  const state = await seq.run();
+
+  expect(state).toEqual({ a: 1, b: 2 });
+  expect(errors).toEqual(3);
+  expect(wrapped).toEqual(1);
+});
+
+test("assign:seq:error", async () => {
+  let errors = 0;
+  const seq = Runnable.init({ name: "wrap:assign:seq:error" }).assign(
+    {
+      a: function setA(state: any) {
+        errors++;
+        if (errors < 3) throw new Error("Error");
+        return 1;
+      },
+      b: 2
+    },
+    { name: "set:ab", circuit: { retry: 1 } }
+  );
+  const wrapped = seq.getWrappedCount();
+
+  expect(async () => {
+    await seq.run();
+  }).rejects.toThrow();
+
+  expect(wrapped).toEqual(1);
+});
+
+test("branch:seq", async () => {
+  let errors = 0;
+  const seq = Runnable.init({ name: "wrap:branch:seq" }).branch(
+    [
+      {
+        if: (state: any) => {
+          errors++;
+          if (errors < 3) throw new Error("Error");
+          return state.a === 1;
+        },
+        then: () => {
+          errors++;
+          if (errors < 3) throw new Error("Error");
+          return { c: 3 };
+        }
+      }
+    ],
+    { name: "branch:ab", circuit: { retry: 2 } }
+  );
+  const wrapped = seq.getWrappedCount();
+
+  const state = await seq.run({ a: 1 });
+  expect(state).toEqual({ a: 1, c: 3 });
+  expect(errors).toEqual(4);
+  expect(wrapped).toEqual(2);
+});
+
+test("branch:seq:error", async () => {
+  let errors = 0;
+  const seq = Runnable.init({ name: "wrap:branch:seq:error" }).branch(
+    [
+      {
+        if: (state: any) => {
+          errors++;
+          if (errors < 3) throw new Error("Error");
+          return state.a === 1;
+        },
+        then: () => {
+          errors++;
+          if (errors < 3) throw new Error("Error");
+          return { c: 3 };
+        }
+      }
+    ],
+    { name: "branch:ab", circuit: { retry: 1 } }
+  );
+  const wrapped = seq.getWrappedCount();
+  expect(async () => {
+    await seq.run();
+  }).rejects.toThrow();
+
+  expect(errors).toEqual(0);
+  expect(wrapped).toEqual(2);
+});
+
+test("paralle:seq:error", async () => {
+  const seq = Runnable.init({ name: "parallel:seq" }).parallel([
+    (state: any) => {
+      state.a = 1;
+      return state;
+    }
+  ]);
+
+  const wrapped = seq.getWrappedCount();
+  expect(wrapped).toEqual(1);
+});
+
+test("goto:seq:error", async () => {
+  const seq = Runnable.init({ name: "goto:seq" })
+    .milestone("a")
+    .milestone("b")
+    .go([
+      {
+        to: "a",
+        if: (state: any) => state.a === 1
+      },
+      {
+        to: "b",
+        if: (state: any) => state.a === 2
+      }
+    ]);
+
+  const wrapped = seq.getWrappedCount();
+  expect(wrapped).toEqual(2);
 });

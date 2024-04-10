@@ -2,7 +2,7 @@
 import EventEmitter from "node:events";
 import { z } from "zod";
 import { Tracer, Meter } from "@opentelemetry/api";
-import { SwitchCase, StepOptions, Roote, StepEvent, Iteration, StreamTransformer, RunnableParams } from "./types.js";
+import { RunState, SwitchCase, StepOptions, Roote, StepEvent, StreamTransformer, RunnableParams } from "./types.js";
 export default class Runnable {
     private name?;
     private state;
@@ -20,12 +20,14 @@ export default class Runnable {
     private runDuration;
     private runId;
     private aborted;
+    private wrappedFncs;
     private circuit?;
     private constructor();
     getState(): object;
     getEmitter(): EventEmitter;
     getTracer(): Tracer;
     getMeter(): Meter;
+    getWrappedCount(): number;
     private checkEnd;
     on(event: string | symbol, fnc: Function): Runnable;
     emit(event: string | symbol, ...args: any[]): boolean;
@@ -66,13 +68,13 @@ export default class Runnable {
     private _go;
     private stepsIterator;
     private emitStep;
-    iterate(iteration?: Iteration): Promise<void>;
+    private iterate;
     private clone;
     static isRunnable(): boolean;
-    invoke(state?: Record<string, unknown>, params?: RunnableParams): Promise<any>;
-    run(state?: Record<string, unknown>, params?: RunnableParams): Promise<any>;
+    invoke(state?: RunState, params?: RunnableParams): Promise<any>;
+    run(state?: RunState, params?: RunnableParams): Promise<any>;
     stream(params?: RunnableParams): StreamTransformer;
-    streamLog(state?: Record<string, unknown>, params?: RunnableParams): AsyncGenerator<StepEvent>;
+    streamLog(state?: RunState, params?: RunnableParams): AsyncGenerator<StepEvent>;
     static from(steps: any[], params?: RunnableParams): Runnable;
     static init(params?: RunnableParams): Runnable;
 }

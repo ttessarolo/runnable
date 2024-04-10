@@ -1,75 +1,108 @@
+import EventEmitter from "node:events";
 import Keyv from "keyv";
 import { z } from "zod";
-import { WrapOptions, RunChache, RunState } from "./types.js";
-import { stringifyState, stringifyKeys } from "./utils.js";
+import { WrapOptions, RunCache, RunState } from "./types.js";
+import { stringifyState, stringifyKeys, isFunc } from "./utils.js";
 
 export default class Cache {
+  private id?: string;
+  private active?: boolean;
   private cache?: Keyv;
-  private config?: RunChache | undefined;
+  private config?: RunCache | undefined;
+  private key?: string;
+  private ttl?: number;
+  private emitter?: EventEmitter;
 
-  cnostructor(config: WrapOptions) {
-    if (config.cache) {
-      if (typeof config.cache.cacheKeyStrategy === "string") {
+  constructor(
+    id: { prefix?: string; name?: string },
+    state: RunState = {},
+    config?: WrapOptions,
+    emitter?: EventEmitter
+  ) {
+    this.active = this.checkActive(state, config);
+    if (this.active) {
+      if (!id.name || !id.prefix) {
+        throw new Error(
+          "To enable cache you must specifiy runnable sequence name and function name (no anonymous or arrow functions allowed)."
+        );
+      }
+
+      if (typeof config?.cache?.cacheKeyStrategy === "string") {
         config.cache.cacheKeyStrategy = [config.cache.cacheKeyStrategy];
       }
-      this.config = config.cache;
+
+      this.emitter = emitter;
+      this.id = `${id.prefix}:${id.name}`;
+      this.config = config?.cache;
+      this.key = this.getCacheKey(state);
+      this.ttl = this.getTtl(state);
+
       this.cache = new Keyv({
         uri:
-          typeof config.cache.store === "string"
+          typeof config?.cache?.store === "string"
             ? config.cache.store
             : undefined,
         store:
-          typeof config.cache.store !== "string"
-            ? config.cache.store
+          typeof config?.cache?.store !== "string"
+            ? config?.cache?.store
             : undefined,
-        namespace: "runnify:cache"
+        namespace: "runnify"
       });
     }
+    return this;
   }
 
-  private async isActive(state: object): Promise<boolean> {
-    if (!this.cache) return false;
-    if (typeof this.config?.active === "boolean") return this.config.active;
-    return await this.config?.active(state);
+  private checkActive(state: object, config?: WrapOptions): boolean {
+    if (!config?.cache) return false;
+    if (config?.cache.active === undefined && config?.cache.store) return true;
+    if (typeof config?.cache.active === "boolean") return config?.cache.active;
+    if (config?.cache.active instanceof Function) config?.cache.active(state);
+
+    return false;
   }
 
-  private async getCacheKey(state: RunState): Promise<string> {
+  private getCacheKey(state: RunState): string {
+    let key: string = "";
+
     if (Array.isArray(this.config?.cacheKeyStrategy)) {
-      return stringifyKeys(state, this.config.cacheKeyStrategy);
-    }
-    if (typeof this.config?.cacheKeyStrategy === "function") {
-      return await this.config.cacheKeyStrategy(state);
+      key = stringifyKeys(state, this.config.cacheKeyStrategy);
+    } else if (isFunc(this.config?.cacheKeyStrategy)) {
+      key = this.config?.cacheKeyStrategy?.(state);
+    } else if (this.config?.cacheKeyStrategy instanceof z.ZodType) {
+      key = stringifyState(this.config.cacheKeyStrategy.parse(state));
     }
 
-    if (this.config?.cacheKeyStrategy instanceof z.ZodType) {
-      return stringifyState(this.config.cacheKeyStrategy.parse(state));
-    }
-    return stringifyState(state);
+    return `${this.id}${key ? `:${key}` : ""}`;
   }
 
-  private async getTtl(state: RunState): Promise<number> {
+  private getTtl(state: RunState): number | undefined {
     if (typeof this.config?.ttlStrategy === "number") {
       return this.config.ttlStrategy;
     }
-    if (this.config?.ttlStrategy instanceof Promise) {
-      return await this.config.ttlStrategy(state);
+    if (isFunc(this.config?.ttlStrategy)) {
+      return this.config?.ttlStrategy?.(state);
     }
-    return 0;
+    return undefined;
   }
 
-  async get(state: RunState): Promise<object | null> {
-    if (await this.isActive(state)) {
-      const key = await this.getCacheKey(state);
-      return this.cache?.get(key);
+  async get(): Promise<object | null> {
+    if (this.active && this.key) {
+      const R = await this.cache?.get(this.key);
+      if (this.emitter) {
+        if (R) this.emitter.emit("cache:hit", this.key);
+        else this.emitter.emit("cache:miss", this.key);
+      }
+      return R;
     }
     return null;
   }
 
-  async set(state: RunState, value: object): Promise<void> {
-    if (await this.isActive(state)) {
-      const key = await this.getCacheKey(state);
-      const ttl = await this.getTtl(state);
-      this.cache?.set(key, value, ttl);
+  async set(value: object): Promise<void> {
+    if (this.active && this.key && value) {
+      await this.cache?.set(this.key, value, this.ttl);
+      if (this.emitter) {
+        this.emitter.emit("cache:set", this.key);
+      }
     }
   }
 }

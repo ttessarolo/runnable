@@ -3,6 +3,7 @@ import EventEmitter from "node:events";
 import { z } from "zod";
 import Runnable from "./index.js";
 export { Runnable };
+export type RunState = Record<string, unknown>;
 export declare enum StepType {
     START = "start",
     PIPE = "pipe",
@@ -83,17 +84,17 @@ export interface RunFncInterface {
         emit: (arg1: string | symbol, arg2: any) => void;
     }): Promise<object>;
 }
-export interface RunChache {
+export interface RunCache {
     store: string | any;
     active: boolean | Function;
     cacheKeyStrategy?: string[] | Function | z.ZodType;
-    ttlStrategy?: number | Promise<any>;
+    ttlStrategy?: number | Function;
     timeout?: number;
 }
 export interface WrapOptions {
     avoidExec?: boolean;
     fallback?: Function | Runnable;
-    cache?: RunChache;
+    cache?: RunCache;
     retry?: {
         maxAttempts: number;
         maxDelay?: number;

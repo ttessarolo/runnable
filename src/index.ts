@@ -32,7 +32,7 @@ import {
 // Others
 // https://github.com/genesys/mollitia
 // https://github.com/Diplomatiq/resily
-import { isFunc } from "./utils.js";
+import { isExecutable, isFunc } from "./utils.js";
 import Cache from "./cache.js";
 import {
   RunState,
@@ -53,7 +53,7 @@ import {
 
 export default class Runnable {
   private name?: string;
-  private state: object;
+  private state: RunState;
   private emitter: EventEmitter;
   private steps: Step[] = [];
   private iterator: IteratorFunction | undefined;
@@ -68,9 +68,10 @@ export default class Runnable {
   private runDuration: Histogram;
   private runId: string;
   private aborted: boolean = false;
+  private wrappedFncs: number = 0;
   private circuit?: WrapOptions;
 
-  private constructor(state: object, params: RunnableParams = {}) {
+  private constructor(state: RunState, params: RunnableParams = {}) {
     this.name = params.name;
     this.state = state;
     this.emitter = params.emitter ?? new EventEmitter();
@@ -109,6 +110,10 @@ export default class Runnable {
     return this.meter;
   }
 
+  getWrappedCount(): number {
+    return this.wrappedFncs;
+  }
+
   private checkEnd(): void {
     if (this.steps.at(-1)?.type !== StepType.END) {
       this.setStep({ type: StepType.END });
@@ -125,8 +130,16 @@ export default class Runnable {
   }
 
   private wrapFnc(fnc: Function, options?: WrapOptions): Function {
+    if (!options) return fnc;
+
     const _this = this;
     const policies: any[] = [];
+    const cache = new Cache(
+      { prefix: this.name, name: fnc.name },
+      this.state,
+      options,
+      this.emitter
+    );
 
     if (options?.fallback) {
       policies.push(
@@ -180,28 +193,69 @@ export default class Runnable {
 
     if (policies.length > 0) {
       return async function () {
-        const results = await wrap(...policies).execute(() => {
-          return options?.avoidExec
-            ? fnc.call(_this, ...arguments)
-            : _this._exec(fnc);
-        });
-        return results;
+        const R =
+          (await cache.get()) ??
+          ((await wrap(...policies).execute(() => {
+            return options?.avoidExec
+              ? fnc.call(_this, ...arguments)
+              : _this._exec(fnc);
+          })) as object);
+        await cache.set(R);
+        return R;
       };
     } else
       return async function () {
-        const results = await fnc.call(_this, ...arguments);
-        return results;
+        const R = (await cache.get()) ?? (await fnc.call(_this, ...arguments));
+        await cache.set(R);
+        return R;
       };
   }
 
   private wrapStepFncs(step: Step) {
     // Skip wrapping loop chain functions
-    if (step.type === StepType.LOOP) return;
+    if (
+      [
+        StepType.START,
+        StepType.END,
+        StepType.MILESTONE,
+        StepType.LOOP
+      ].includes(step.type)
+    )
+      return;
 
-    for (const key of ["step", "fnc"]) {
-      if ((step as any)[key] instanceof Function) {
-        const fnc = (step as any)[key];
-        (step as any)[key] = this.wrapFnc(fnc, step.options?.circuit);
+    if (step.type === StepType.ASSIGN) {
+      Object.entries(step.step).forEach(([key, fnc]) => {
+        if (isFunc(fnc)) {
+          (step.step as any)[key] = this.wrapFnc(fnc, step.options?.circuit);
+          this.wrappedFncs += 1;
+        }
+      });
+    } else if (step.type === StepType.PARALLEL) {
+      for (const fnc of step.step) {
+        if (isFunc(fnc)) {
+          const index = step.step.indexOf(fnc);
+          step.step[index] = this.wrapFnc(fnc, step.options?.circuit);
+          this.wrappedFncs += 1;
+        }
+      }
+    } else if ([StepType.BRANCH, StepType.GOTO].includes(step.type)) {
+      for (const roads of step.step) {
+        if (isFunc(roads.then)) {
+          roads.then = this.wrapFnc(roads.then, step.options?.circuit);
+          this.wrappedFncs += 1;
+        }
+        if (isFunc(roads.if)) {
+          roads.if = this.wrapFnc(roads.if, step.options?.circuit);
+          this.wrappedFncs += 1;
+        }
+      }
+    } else {
+      for (const key of ["step", "fnc"]) {
+        if (isFunc((step as any)[key])) {
+          const fnc = (step as any)[key];
+          (step as any)[key] = this.wrapFnc(fnc, step.options?.circuit);
+          this.wrappedFncs += 1;
+        }
       }
     }
   }
@@ -314,7 +368,7 @@ export default class Runnable {
 
   go(rootes: Roote[] | Roote, options?: StepOptions): Runnable {
     this.setStep({
-      step: rootes,
+      step: Array.isArray(rootes) ? rootes : [rootes],
       type: StepType.GOTO,
       options
     });
@@ -337,12 +391,12 @@ export default class Runnable {
   private async _exec(
     fnc: Function | Runnable,
     options: StepOptions = {}
-  ): Promise<object> {
+  ): Promise<RunState> {
     let stato: RunState = {};
 
     if (options.schema) {
       stato = options.schema.parse(this.state);
-    } else stato = structuredClone(this.state) as RunState;
+    } else stato = structuredClone(this.state);
 
     return fnc instanceof Runnable
       ? await fnc.run(stato, {
@@ -441,7 +495,7 @@ export default class Runnable {
       const keys: any[] = [];
       for (const [k, objFnc] of Object.entries(key)) {
         keys.push(k);
-        if (isFunc(objFnc)) execs.push(this._exec(objFnc, options));
+        if (isExecutable(objFnc)) execs.push(this._exec(objFnc, options));
         else execs.push(Promise.resolve(objFnc));
       }
       const values = await Promise.all(execs);
@@ -467,8 +521,8 @@ export default class Runnable {
       }
     }
 
-    const update = (await Promise.all(execs)).reduce(
-      (acc: object, val: object) => {
+    const update: RunState = (await Promise.all(execs)).reduce(
+      (acc: RunState, val: object) => {
         if (val) return merge(acc, val);
         return acc;
       },
@@ -523,11 +577,10 @@ export default class Runnable {
   }
 
   private async _go(
-    rootes: Roote[] | Roote,
+    rootes: Roote[],
     options: StepOptions = {}
   ): Promise<Runnable> {
-    const roots = Array.isArray(rootes) ? rootes : [rootes];
-    for (const root of roots) {
+    for (const root of rootes) {
       const { to, if: condition } = root;
 
       if (!this.nodes.has(to)) throw new Error(`GoTo: Node ${to} not found`);
@@ -575,7 +628,7 @@ export default class Runnable {
     this.emit("step", event);
   }
 
-  async iterate(iteration?: Iteration) {
+  private async iterate(iteration?: Iteration): Promise<RunState> {
     if (!iteration) iteration = this.iterator!.next();
     if (!iteration.done) {
       const { step, type, fnc, key, options } = iteration.value ?? {};
@@ -649,6 +702,7 @@ export default class Runnable {
         }
       );
     }
+    return this.state;
   }
 
   private clone(state: object = {}, params: RunnableParams = {}): Runnable {
@@ -688,7 +742,7 @@ export default class Runnable {
       .startActiveSpan(this.name ?? "runnable", async (span: Span) => {
         rnb.setSpanAttr(span);
         try {
-          const wrappedIterate = rnb.wrapFnc(
+          const wrappedIterate = await rnb.wrapFnc(
             rnb.iterate, //.bind(rnb),
             { ...(params.circuit ?? rnb.circuit), avoidExec: true }
           );
@@ -732,7 +786,7 @@ export default class Runnable {
   static from(steps: any[], params: RunnableParams = {}) {
     const r = new Runnable({}, params);
     for (const step of steps) {
-      if (isFunc(step)) r.pipe(step);
+      if (isExecutable(step)) r.pipe(step);
       if (typeof step === "object") r.assign(step);
     }
     return r;

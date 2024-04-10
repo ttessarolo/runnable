@@ -94,7 +94,7 @@ export interface RunFncInterface {
   ): Promise<object>;
 }
 
-export interface RunChache {
+export interface RunCache {
   store: string | any;
   active: boolean | Function;
   cacheKeyStrategy?: string[] | Function | z.ZodType;
@@ -104,7 +104,7 @@ export interface RunChache {
 export interface WrapOptions {
   avoidExec?: boolean;
   fallback?: Function | Runnable;
-  cache?: RunChache;
+  cache?: RunCache;
   retry?:
     | {
         maxAttempts: number;
