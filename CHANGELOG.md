@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.12](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.11%0Dv1.6.12) (2024-04-10)
+
+
+### Bug Fixes
+
+* parallel, branch, assign, goto wrapping ([d459412](https://github.com/ttessarolo/runnable/commits/d4594128b4a584b21b3d0ee36922bd5ed704b04b))
+
 ### [1.6.11](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.10%0Dv1.6.11) (2024-04-10)
 
 
