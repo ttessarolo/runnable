@@ -10,6 +10,7 @@ export default class Cache {
     private ttl?;
     constructor(id: {
         prefix?: string;
+        stepName?: string;
         name?: string;
     }, state?: RunState, config?: WrapOptions);
     private checkActive;

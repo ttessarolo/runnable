@@ -131,11 +131,10 @@ export default class Runnable {
 
   private wrapFnc(fnc: Function, options?: WrapOptions): Function {
     if (!options) return fnc;
-
     const _this = this;
     const policies: any[] = [];
     const cache = new Cache(
-      { prefix: this.name, name: fnc.name },
+      { prefix: this.name, stepName: options.name, name: fnc.name },
       this.state,
       options
     );
@@ -228,7 +227,10 @@ export default class Runnable {
     if (step.type === StepType.ASSIGN) {
       Object.entries(step.step).forEach(([key, fnc]) => {
         if (isFunc(fnc)) {
-          (step.step as any)[key] = this.wrapFnc(fnc, step.options?.circuit);
+          (step.step as any)[key] = this.wrapFnc(fnc, {
+            name: step.options?.name,
+            ...step.options?.circuit
+          });
           this.wrappedFncs += 1;
         }
       });
@@ -236,18 +238,27 @@ export default class Runnable {
       for (const fnc of step.step) {
         if (isFunc(fnc)) {
           const index = step.step.indexOf(fnc);
-          step.step[index] = this.wrapFnc(fnc, step.options?.circuit);
+          step.step[index] = this.wrapFnc(fnc, {
+            name: step.options?.name,
+            ...step.options?.circuit
+          });
           this.wrappedFncs += 1;
         }
       }
     } else if ([StepType.BRANCH, StepType.GOTO].includes(step.type)) {
       for (const roads of step.step) {
         if (isFunc(roads.then)) {
-          roads.then = this.wrapFnc(roads.then, step.options?.circuit);
+          roads.then = this.wrapFnc(roads.then, {
+            name: step.options?.name,
+            ...step.options?.circuit
+          });
           this.wrappedFncs += 1;
         }
         if (isFunc(roads.if)) {
-          roads.if = this.wrapFnc(roads.if, step.options?.circuit);
+          roads.if = this.wrapFnc(roads.if, {
+            name: step.options?.name,
+            ...step.options?.circuit
+          });
           this.wrappedFncs += 1;
         }
       }
@@ -255,7 +266,10 @@ export default class Runnable {
       for (const key of ["step", "fnc"]) {
         if (isFunc((step as any)[key])) {
           const fnc = (step as any)[key];
-          (step as any)[key] = this.wrapFnc(fnc, step.options?.circuit);
+          (step as any)[key] = this.wrapFnc(fnc, {
+            name: step.options?.name,
+            ...step.options?.circuit
+          });
           this.wrappedFncs += 1;
         }
       }
@@ -479,7 +493,7 @@ export default class Runnable {
     fnc: Function,
     options: StepOptions = {}
   ): Promise<Runnable> {
-    await fnc(structuredClone(this.state), this.emitter);
+    await this._exec(fnc, options); //fnc(structuredClone(this.state), this.emitter);
     return this;
   }
 
@@ -748,6 +762,7 @@ export default class Runnable {
         try {
           const wrappedIterate = await rnb.wrapFnc(rnb.iterate, {
             ...(params.circuit ?? rnb.circuit),
+            name: "start",
             avoidExec: true
           });
           const fallback = await wrappedIterate.call(rnb);

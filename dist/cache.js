@@ -17,7 +17,7 @@ export default class Cache {
             if (typeof config?.cache?.cacheKeyStrategy === "string") {
                 config.cache.cacheKeyStrategy = [config.cache.cacheKeyStrategy];
             }
-            this.id = `${id.prefix}:${id.name}`;
+            this.id = `${id.prefix}:${id.stepName ? `${id.stepName}:` : ""}${id.name}`;
             this.config = config?.cache;
             this.key = this.getCacheKey(state);
             this.ttl = this.getTtl(state);

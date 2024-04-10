@@ -89,7 +89,7 @@ test("cache:throw:noname", () => {
 test("cache:set", async () => {
   const [chain, store, events] = getChain("hit:seq");
   await chain.run({ a: 0 });
-  const chached = store.get("runnify:hit:seq:iterate:a:b:c") ?? "";
+  const chached = store.get("runnify:hit:seq:start:iterate:a:b:c") ?? "";
   expect(getEvent(events, "hit")).toEqual(0);
   expect(getEvent(events, "miss")).toEqual(1);
   expect(getEvent(events, "set")).toEqual(1);
@@ -104,7 +104,7 @@ test("cache:get", async () => {
   const [chain, store, events] = getChain("hit:seq");
   await chain.run({ a: 0 });
   await chain.run({ a: 0 });
-  const chached = store.get("runnify:hit:seq:iterate:a:b:c") ?? "";
+  const chached = store.get("runnify:hit:seq:start:iterate:a:b:c") ?? "";
   expect(getEvent(events, "hit")).toEqual(1);
   expect(getEvent(events, "miss")).toEqual(1);
   expect(getEvent(events, "set")).toEqual(2);
@@ -126,7 +126,8 @@ test("cache:get:redis", async () => {
   await store.clear();
   await chain.run({ a: 0 });
   await chain.run({ a: 0 });
-  const chached = (await store.get("runnify:hit:seq:iterate:a:b:c")) ?? "";
+  const chached =
+    (await store.get("runnify:hit:seq:start:iterate:a:b:c")) ?? "";
   await (store as KeyvRedis).disconnect();
 
   expect(getEvent(events, "hit")).toEqual(1);
@@ -149,11 +150,16 @@ test("cache:get:childs", async () => {
   const [chain, store, events] = getChain("hit:seq", undefined, true, true);
   await chain.run({ a: 0 });
   await chain.run({ a: 0 });
-  const chached = store.get("runnify:hit:seq:pusha:a:b:c") ?? "";
+  const chached1 = store.get("runnify:hit:seq:push:b:pusha:a:b:c") ?? "";
+  const chached2 = store.get("runnify:hit:seq:push:c:pushb:a:b:c") ?? "";
+
   expect(getEvent(events, "hit")).toEqual(2);
   expect(getEvent(events, "miss")).toEqual(2);
   expect(getEvent(events, "set")).toEqual(4);
-  expect(JSON.parse(chached as string).value).toEqual({
+  expect(JSON.parse(chached1 as string).value).toEqual({
     b: 1
+  });
+  expect(JSON.parse(chached2 as string).value).toEqual({
+    c: 2
   });
 });

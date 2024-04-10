@@ -92,6 +92,7 @@ export interface RunCache {
     timeout?: number;
 }
 export interface WrapOptions {
+    name?: string;
     avoidExec?: boolean;
     fallback?: Function | Runnable;
     cache?: RunCache;

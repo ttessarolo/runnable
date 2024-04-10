@@ -13,7 +13,7 @@ export default class Cache {
   private ttl?: number;
 
   constructor(
-    id: { prefix?: string; name?: string },
+    id: { prefix?: string; stepName?: string; name?: string },
     state: RunState = {},
     config?: WrapOptions
   ) {
@@ -29,7 +29,9 @@ export default class Cache {
         config.cache.cacheKeyStrategy = [config.cache.cacheKeyStrategy];
       }
 
-      this.id = `${id.prefix}:${id.name}`;
+      this.id = `${id.prefix}:${id.stepName ? `${id.stepName}:` : ""}${
+        id.name
+      }`;
       this.config = config?.cache;
       this.key = this.getCacheKey(state);
       this.ttl = this.getTtl(state);
