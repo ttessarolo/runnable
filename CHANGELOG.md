@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.13](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.12%0Dv1.6.13) (2024-04-10)
+
+
+### Bug Fixes
+
+* correct emitter for cache ([c72a5ac](https://github.com/ttessarolo/runnable/commits/c72a5ac0c522d7363e4d0bfb51a41233033498bb))
+
 ### [1.6.12](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.11%0Dv1.6.12) (2024-04-10)
 
 
