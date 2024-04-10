@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.11](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.10%0Dv1.6.11) (2024-04-10)
+
+
+### Others
+
+* chache class ([f06de23](https://github.com/ttessarolo/runnable/commits/f06de2317a3e49f66ebdd51c1ee28c8c7533d198))
+
 ### [1.6.10](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.9%0Dv1.6.10) (2024-04-09)
 
 
