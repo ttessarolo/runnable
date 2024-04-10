@@ -2,7 +2,7 @@
 import EventEmitter from "node:events";
 import { z } from "zod";
 import { Tracer, Meter } from "@opentelemetry/api";
-import { SwitchCase, StepOptions, Roote, StepEvent, Iteration, IteratorFunction, StreamTransformer, RunnableParams } from "./types.js";
+import { SwitchCase, StepOptions, Roote, StepEvent, Iteration, StreamTransformer, RunnableParams } from "./types.js";
 export default class Runnable {
     private name?;
     private state;
@@ -33,6 +33,12 @@ export default class Runnable {
     private wrapStepFncs;
     private setStep;
     milestone(name: string): Runnable;
+    /**
+     * Adds a step to the runnable pipeline using the provided function or runnable.
+     * @param fnc - The function or runnable to be added as a step.
+     * @param options: - Optional options for the step.
+     * @returns The updated Runnable instance.
+     */
     pipe(fnc: Function | Runnable, options?: StepOptions): Runnable;
     push(fnc: Function | Runnable, options?: StepOptions): Runnable;
     assign(key: string | object, fnc?: Function | StepOptions, options?: StepOptions): Runnable;
@@ -58,15 +64,15 @@ export default class Runnable {
     private _parallel;
     private _loop;
     private _go;
-    stepsIterator(): IteratorFunction;
+    private stepsIterator;
     private emitStep;
     iterate(iteration?: Iteration): Promise<void>;
     private clone;
     static isRunnable(): boolean;
-    invoke(state?: object, params?: RunnableParams): Promise<any>;
-    run(state?: object, params?: RunnableParams): Promise<any>;
+    invoke(state?: Record<string, unknown>, params?: RunnableParams): Promise<any>;
+    run(state?: Record<string, unknown>, params?: RunnableParams): Promise<any>;
     stream(params?: RunnableParams): StreamTransformer;
-    streamLog(state?: object, params?: RunnableParams): AsyncGenerator<StepEvent>;
+    streamLog(state?: Record<string, unknown>, params?: RunnableParams): AsyncGenerator<StepEvent>;
     static from(steps: any[], params?: RunnableParams): Runnable;
     static init(params?: RunnableParams): Runnable;
 }

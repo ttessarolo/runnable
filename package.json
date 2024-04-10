@@ -6,7 +6,8 @@
   "types": "./dist/types.d.ts",
   "type": "module",
   "scripts": {
-    "test": "jest --verbose ./test/",
+    "test": "tsc && jest --verbose ./test/operators.test.ts",
+    "doc": "npx typedoc",
     "commit": "git add . && git-cz",
     "version": "standard-version",
     "push": "git push --follow-tags",
@@ -36,6 +37,7 @@
     "jest-esm-transformer-2": "^1.0.0",
     "standard-version": "^9.5.0",
     "ts-jest": "^29.1.2",
+    "typedoc": "^0.25.13",
     "typescript": "^5.4.3"
   },
   "config": {
@@ -46,6 +48,7 @@
   "dependencies": {
     "cockatiel": "^3.1.2",
     "hwp": "^0.3.0",
+    "keyv": "^4.5.4",
     "lodash.get": "^4.4.2",
     "lodash.merge": "^4.6.2",
     "lodash.set": "^4.3.2",

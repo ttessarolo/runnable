@@ -83,15 +83,17 @@ export interface RunFncInterface {
         emit: (arg1: string | symbol, arg2: any) => void;
     }): Promise<object>;
 }
+export interface RunChache {
+    store: string | any;
+    active: boolean | Function;
+    cacheKeyStrategy?: string[] | Function | z.ZodType;
+    ttlStrategy?: number | Promise<any>;
+    timeout?: number;
+}
 export interface WrapOptions {
     avoidExec?: boolean;
     fallback?: Function | Runnable;
-    cache?: {
-        active: boolean | Promise<any>;
-        cacheKeyStrategy?: Promise<any> | z.ZodType;
-        ttlStrategy?: number | Promise<any>;
-        timeout?: number;
-    };
+    cache?: RunChache;
     retry?: {
         maxAttempts: number;
         maxDelay?: number;

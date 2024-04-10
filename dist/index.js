@@ -120,16 +120,20 @@ export default class Runnable {
         if (options?.bulkhead)
             policies.push(bulkhead(options.bulkhead));
         if (policies.length > 0) {
-            return function () {
-                return wrap(...policies).execute(() => {
+            return async function () {
+                const results = await wrap(...policies).execute(() => {
                     return options?.avoidExec
                         ? fnc.call(_this, ...arguments)
                         : _this._exec(fnc);
                 });
+                return results;
             };
         }
         else
-            return fnc.bind(this);
+            return async function () {
+                const results = await fnc.call(_this, ...arguments);
+                return results;
+            };
     }
     wrapStepFncs(step) {
         // Skip wrapping loop chain functions
@@ -152,6 +156,12 @@ export default class Runnable {
         this.setStep({ type: StepType.MILESTONE, options: { name } });
         return this;
     }
+    /**
+     * Adds a step to the runnable pipeline using the provided function or runnable.
+     * @param fnc - The function or runnable to be added as a step.
+     * @param options: - Optional options for the step.
+     * @returns The updated Runnable instance.
+     */
     pipe(fnc, options) {
         this.setStep({
             step: fnc,

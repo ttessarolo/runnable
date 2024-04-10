@@ -16,8 +16,6 @@ import {
   SpanStatusCode
 } from "@opentelemetry/api";
 import {
-  IDefaultPolicyContext,
-  FailureReason,
   ConsecutiveBreaker,
   SamplingBreaker,
   ExponentialBackoff,
@@ -28,7 +26,6 @@ import {
   bulkhead,
   fallback,
   handleAll,
-  handleWhen,
   wrap
 } from "cockatiel";
 //https://github.com/App-vNext/Polly/wiki/PolicyWrap
@@ -36,7 +33,9 @@ import {
 // https://github.com/genesys/mollitia
 // https://github.com/Diplomatiq/resily
 import { isFunc } from "./utils.js";
+import Cache from "./cache.js";
 import {
+  RunState,
   StepType,
   SwitchCase,
   StepOptions,
@@ -180,14 +179,19 @@ export default class Runnable {
     if (options?.bulkhead) policies.push(bulkhead(options.bulkhead));
 
     if (policies.length > 0) {
-      return function () {
-        return wrap(...policies).execute(() => {
+      return async function () {
+        const results = await wrap(...policies).execute(() => {
           return options?.avoidExec
             ? fnc.call(_this, ...arguments)
             : _this._exec(fnc);
         });
+        return results;
       };
-    } else return fnc.bind(this);
+    } else
+      return async function () {
+        const results = await fnc.call(_this, ...arguments);
+        return results;
+      };
   }
 
   private wrapStepFncs(step: Step) {
@@ -212,6 +216,12 @@ export default class Runnable {
     this.setStep({ type: StepType.MILESTONE, options: { name } });
     return this;
   }
+  /**
+   * Adds a step to the runnable pipeline using the provided function or runnable.
+   * @param fnc - The function or runnable to be added as a step.
+   * @param options: - Optional options for the step.
+   * @returns The updated Runnable instance.
+   */
   pipe(fnc: Function | Runnable, options?: StepOptions): Runnable {
     this.setStep({
       step: fnc,
@@ -328,11 +338,11 @@ export default class Runnable {
     fnc: Function | Runnable,
     options: StepOptions = {}
   ): Promise<object> {
-    let stato: object = {};
+    let stato: RunState = {};
 
     if (options.schema) {
       stato = options.schema.parse(this.state);
-    } else stato = structuredClone(this.state);
+    } else stato = structuredClone(this.state) as RunState;
 
     return fnc instanceof Runnable
       ? await fnc.run(stato, {
@@ -536,7 +546,7 @@ export default class Runnable {
     return this;
   }
 
-  stepsIterator(): IteratorFunction {
+  private stepsIterator(): IteratorFunction {
     return {
       next: (): Iteration => {
         if (this.nextStep < this.steps.length) {
@@ -665,11 +675,11 @@ export default class Runnable {
     return true;
   }
 
-  async invoke(state?: object, params: RunnableParams = {}) {
+  async invoke(state?: RunState, params: RunnableParams = {}) {
     return this.run(state, params);
   }
 
-  async run(state?: object, params: RunnableParams = {}) {
+  async run(state?: RunState, params: RunnableParams = {}) {
     const startTime = new Date().getTime();
     const rnb = this.clone(state, params);
 
@@ -701,13 +711,13 @@ export default class Runnable {
 
   stream(params: RunnableParams = {}): StreamTransformer {
     return mapper(
-      (state?: object) => this.run(state, params),
+      (state?: RunState) => this.run(state, params),
       params.highWaterMark ?? 16
     );
   }
 
   async *streamLog(
-    state?: object,
+    state?: RunState,
     params: RunnableParams = {}
   ): AsyncGenerator<StepEvent> {
     const rnb = this.clone(state, params);

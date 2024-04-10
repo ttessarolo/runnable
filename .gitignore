@@ -73,3 +73,6 @@ metrics
 
 # env
 .env
+
+# doc
+doc/
