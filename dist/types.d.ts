@@ -85,8 +85,8 @@ export interface RunFncInterface {
     }): Promise<object>;
 }
 export interface RunCache {
-    store: string | any;
-    active: boolean | Function;
+    store?: string | any;
+    active?: boolean | Function;
     cacheKeyStrategy?: string[] | Function | z.ZodType;
     ttlStrategy?: number | Function;
     timeout?: number;

@@ -116,7 +116,7 @@ export default class Runnable {
 
   private checkEnd(): void {
     if (this.steps.at(-1)?.type !== StepType.END) {
-      this.setStep({ type: StepType.END });
+      this.setStep({ type: StepType.END, options: { name: "end" } });
     }
   }
 
@@ -137,8 +137,7 @@ export default class Runnable {
     const cache = new Cache(
       { prefix: this.name, name: fnc.name },
       this.state,
-      options,
-      this.emitter
+      options
     );
 
     if (options?.fallback) {
@@ -192,21 +191,24 @@ export default class Runnable {
     if (options?.bulkhead) policies.push(bulkhead(options.bulkhead));
 
     if (policies.length > 0) {
-      return async function () {
+      return async function (this: any) {
+        const _that = this;
         const R =
-          (await cache.get()) ??
+          (await cache.get(_that.getEmitter())) ??
           ((await wrap(...policies).execute(() => {
             return options?.avoidExec
               ? fnc.call(_this, ...arguments)
               : _this._exec(fnc);
           })) as object);
-        await cache.set(R);
+        await cache.set(R, _that.getEmitter());
         return R;
       };
     } else
-      return async function () {
-        const R = (await cache.get()) ?? (await fnc.call(_this, ...arguments));
-        await cache.set(R);
+      return async function (this: any) {
+        const R =
+          (await cache.get(this.getEmitter())) ??
+          (await fnc.call(_this, ...arguments));
+        await cache.set(R, this.getEmitter());
         return R;
       };
   }
@@ -392,6 +394,7 @@ export default class Runnable {
     fnc: Function | Runnable,
     options: StepOptions = {}
   ): Promise<RunState> {
+    if (isFunc(fnc)) fnc = fnc.bind(this);
     let stato: RunState = {};
 
     if (options.schema) {
@@ -414,8 +417,9 @@ export default class Runnable {
               if (span.isRecording()) {
                 span.addEvent(JSON.stringify(stato));
               }
-              const response = await fnc.call(this.context, stato, {
-                emit: this.emitter.emit.bind(this.emitter)
+              const response = await fnc.call(this, stato, {
+                emit: this.emitter.emit.bind(this.emitter),
+                _this: this.context
               });
               if (span.isRecording()) {
                 if (span.isRecording()) {
@@ -742,11 +746,11 @@ export default class Runnable {
       .startActiveSpan(this.name ?? "runnable", async (span: Span) => {
         rnb.setSpanAttr(span);
         try {
-          const wrappedIterate = await rnb.wrapFnc(
-            rnb.iterate, //.bind(rnb),
-            { ...(params.circuit ?? rnb.circuit), avoidExec: true }
-          );
-          const fallback = await wrappedIterate();
+          const wrappedIterate = await rnb.wrapFnc(rnb.iterate, {
+            ...(params.circuit ?? rnb.circuit),
+            avoidExec: true
+          });
+          const fallback = await wrappedIterate.call(rnb);
           return fallback ?? rnb.getState();
         } catch (ex) {
           if (ex instanceof Error) {
@@ -794,7 +798,7 @@ export default class Runnable {
 
   static init(params: RunnableParams = {}) {
     const runnable = new Runnable({}, params);
-    runnable.setStep({ type: StepType.START });
+    runnable.setStep({ type: StepType.START, options: { name: "start" } });
     return runnable;
   }
 }

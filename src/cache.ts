@@ -11,13 +11,11 @@ export default class Cache {
   private config?: RunCache | undefined;
   private key?: string;
   private ttl?: number;
-  private emitter?: EventEmitter;
 
   constructor(
     id: { prefix?: string; name?: string },
     state: RunState = {},
-    config?: WrapOptions,
-    emitter?: EventEmitter
+    config?: WrapOptions
   ) {
     this.active = this.checkActive(state, config);
     if (this.active) {
@@ -31,7 +29,6 @@ export default class Cache {
         config.cache.cacheKeyStrategy = [config.cache.cacheKeyStrategy];
       }
 
-      this.emitter = emitter;
       this.id = `${id.prefix}:${id.name}`;
       this.config = config?.cache;
       this.key = this.getCacheKey(state);
@@ -85,23 +82,23 @@ export default class Cache {
     return undefined;
   }
 
-  async get(): Promise<object | null> {
+  async get(emitter: EventEmitter): Promise<object | null> {
     if (this.active && this.key) {
       const R = await this.cache?.get(this.key);
-      if (this.emitter) {
-        if (R) this.emitter.emit("cache:hit", this.key);
-        else this.emitter.emit("cache:miss", this.key);
+      if (emitter) {
+        if (R) emitter.emit("cache:hit", this.key);
+        else emitter.emit("cache:miss", this.key);
       }
       return R;
     }
     return null;
   }
 
-  async set(value: object): Promise<void> {
+  async set(value: object, emitter: EventEmitter): Promise<void> {
     if (this.active && this.key && value) {
       await this.cache?.set(this.key, value, this.ttl);
-      if (this.emitter) {
-        this.emitter.emit("cache:set", this.key);
+      if (emitter) {
+        emitter.emit("cache:set", this.key);
       }
     }
   }

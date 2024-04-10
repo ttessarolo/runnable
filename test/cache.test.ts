@@ -1,6 +1,7 @@
+import KeyvRedis from "@keyv/redis";
 import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
-import { RunCache } from "../dist/types.js";
+import { RunCache, RunnableParams } from "../dist/types.js";
 import "./utils/instrumentation.js";
 
 function getEvent(events: string[], prefix: string): number {
@@ -14,26 +15,66 @@ const getChain = (
     store: "memory",
     cacheKeyStrategy: ["a", "b", "c"],
     ttlStrategy: 10000
-  }
-): [Runnable, Map<string, string>, string[]] => {
-  const store: Map<string, string> = new Map();
+  },
+  cacheChilds = false,
+  nameChilds = false
+): [Runnable, Map<string, string> | KeyvRedis, string[]] => {
+  const store =
+    typeof cacheParms.store !== "string" ? cacheParms.store : new Map();
   const events: string[] = [];
-  const runnable = Runnable.init({
-    name,
-    circuit: {
-      cache: {
-        store,
-        active: cacheParms.active,
-        cacheKeyStrategy: cacheParms.cacheKeyStrategy,
-        ttlStrategy: cacheParms.ttlStrategy
-      }
-    }
-  })
-    .push(() => ({ b: 1 }))
-    .push(() => ({ c: 2 }))
-    .on("cache:hit", (key: string) => events.push(`cache:hit:${key}`))
-    .on("cache:miss", (key: string) => events.push(`cache:miss:${key}`))
-    .on("cache:set", (key: string) => events.push(`cache:set:${key}`));
+  const runParams: RunnableParams = { name };
+  const cache: RunCache = {
+    store,
+    active: cacheParms.active,
+    cacheKeyStrategy: cacheParms.cacheKeyStrategy,
+    ttlStrategy: cacheParms.ttlStrategy
+  };
+  if (!cacheChilds) runParams.circuit = { cache };
+  const runnable = Runnable.init(runParams)
+    .on("cache:hit", function onChacheHit(key: string) {
+      events.push(`cache:hit:${key}`);
+    })
+    .on("cache:miss", function onChacheMiss(key: string) {
+      events.push(`cache:miss:${key}`);
+    })
+    .on("cache:set", function onChacheSet(key: string) {
+      events.push(`cache:set:${key}`);
+    });
+  // .on("step", function onStep(step: any) {
+  //   events.push(`step:${step.name}`);
+  // });
+
+  if (nameChilds) {
+    runnable
+      .push(
+        function pusha() {
+          return { b: 1 };
+        },
+        {
+          name: "push:b",
+          circuit: cacheChilds ? { cache } : undefined
+        }
+      )
+      .push(
+        function pushb() {
+          return { c: 2 };
+        },
+        {
+          name: "push:c",
+          circuit: cacheChilds ? { cache } : undefined
+        }
+      );
+  } else {
+    runnable
+      .push(() => ({ b: 1 }), {
+        name: "push:b",
+        circuit: cacheChilds ? { cache } : undefined
+      })
+      .push(() => ({ c: 2 }), {
+        name: "push:c",
+        circuit: cacheChilds ? { cache } : undefined
+      });
+  }
 
   return [runnable, store, events];
 };
@@ -52,7 +93,7 @@ test("cache:set", async () => {
   expect(getEvent(events, "hit")).toEqual(0);
   expect(getEvent(events, "miss")).toEqual(1);
   expect(getEvent(events, "set")).toEqual(1);
-  expect(JSON.parse(chached).value).toEqual({
+  expect(JSON.parse(chached as string).value).toEqual({
     a: 0,
     b: 1,
     c: 2
@@ -67,9 +108,52 @@ test("cache:get", async () => {
   expect(getEvent(events, "hit")).toEqual(1);
   expect(getEvent(events, "miss")).toEqual(1);
   expect(getEvent(events, "set")).toEqual(2);
+  expect(JSON.parse(chached as string).value).toEqual({
+    a: 0,
+    b: 1,
+    c: 2
+  });
+});
+
+test("cache:get:redis", async () => {
+  const keyvRedis = new KeyvRedis("redis://localhost:6379");
+  const [chain, store, events] = getChain("hit:seq", {
+    active: true,
+    store: keyvRedis,
+    cacheKeyStrategy: ["a", "b", "c"],
+    ttlStrategy: 10000
+  });
+  await store.clear();
+  await chain.run({ a: 0 });
+  await chain.run({ a: 0 });
+  const chached = (await store.get("runnify:hit:seq:iterate:a:b:c")) ?? "";
+  await (store as KeyvRedis).disconnect();
+
+  expect(getEvent(events, "hit")).toEqual(1);
+  expect(getEvent(events, "miss")).toEqual(1);
+  expect(getEvent(events, "set")).toEqual(2);
   expect(JSON.parse(chached).value).toEqual({
     a: 0,
     b: 1,
     c: 2
+  });
+});
+
+test("cache:get:childs:throw", async () => {
+  expect(async () => {
+    getChain("hit:seq", undefined, true);
+  }).rejects.toThrow();
+});
+
+test("cache:get:childs", async () => {
+  const [chain, store, events] = getChain("hit:seq", undefined, true, true);
+  await chain.run({ a: 0 });
+  await chain.run({ a: 0 });
+  const chached = store.get("runnify:hit:seq:pusha:a:b:c") ?? "";
+  expect(getEvent(events, "hit")).toEqual(2);
+  expect(getEvent(events, "miss")).toEqual(2);
+  expect(getEvent(events, "set")).toEqual(4);
+  expect(JSON.parse(chached as string).value).toEqual({
+    b: 1
   });
 });

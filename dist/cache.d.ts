@@ -8,14 +8,13 @@ export default class Cache {
     private config?;
     private key?;
     private ttl?;
-    private emitter?;
     constructor(id: {
         prefix?: string;
         name?: string;
-    }, state?: RunState, config?: WrapOptions, emitter?: EventEmitter);
+    }, state?: RunState, config?: WrapOptions);
     private checkActive;
     private getCacheKey;
     private getTtl;
-    get(): Promise<object | null>;
-    set(value: object): Promise<void>;
+    get(emitter: EventEmitter): Promise<object | null>;
+    set(value: object, emitter: EventEmitter): Promise<void>;
 }

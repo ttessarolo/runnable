@@ -8,8 +8,7 @@ export default class Cache {
     config;
     key;
     ttl;
-    emitter;
-    constructor(id, state = {}, config, emitter) {
+    constructor(id, state = {}, config) {
         this.active = this.checkActive(state, config);
         if (this.active) {
             if (!id.name || !id.prefix) {
@@ -18,7 +17,6 @@ export default class Cache {
             if (typeof config?.cache?.cacheKeyStrategy === "string") {
                 config.cache.cacheKeyStrategy = [config.cache.cacheKeyStrategy];
             }
-            this.emitter = emitter;
             this.id = `${id.prefix}:${id.name}`;
             this.config = config?.cache;
             this.key = this.getCacheKey(state);
@@ -68,24 +66,24 @@ export default class Cache {
         }
         return undefined;
     }
-    async get() {
+    async get(emitter) {
         if (this.active && this.key) {
             const R = await this.cache?.get(this.key);
-            if (this.emitter) {
+            if (emitter) {
                 if (R)
-                    this.emitter.emit("cache:hit", this.key);
+                    emitter.emit("cache:hit", this.key);
                 else
-                    this.emitter.emit("cache:miss", this.key);
+                    emitter.emit("cache:miss", this.key);
             }
             return R;
         }
         return null;
     }
-    async set(value) {
+    async set(value, emitter) {
         if (this.active && this.key && value) {
             await this.cache?.set(this.key, value, this.ttl);
-            if (this.emitter) {
-                this.emitter.emit("cache:set", this.key);
+            if (emitter) {
+                emitter.emit("cache:set", this.key);
             }
         }
     }
