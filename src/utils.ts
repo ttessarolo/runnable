@@ -22,6 +22,12 @@ export const stringifyState = (obj: RunState) => {
   return keys.join(":");
 };
 
+/**
+ * Converts the specified keys of an object to a string representation.
+ * @param obj - The object to extract the keys from.
+ * @param keys - An array of keys to stringify.
+ * @returns A string representation of the specified keys and their corresponding values.
+ */
 export const stringifyKeys = (obj: RunState, keys: Array<string>) => {
   const chiavi = [];
   for (const key of keys) {
