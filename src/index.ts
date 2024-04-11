@@ -79,7 +79,7 @@ export default class Runnable {
     this.nodes = params.nodes ?? new Map();
     this.steps = params.steps ?? [];
     this.subEvents = params.subEvents ?? [];
-    this.context = params.context ?? this;
+    this.context = params.context;
     this.runId = params.runId ?? uuidv4();
     this.subEvents.forEach((event: EventType) =>
       this.emitter.on(event.name, event.listener)
@@ -135,7 +135,6 @@ export default class Runnable {
     const policies: any[] = [];
     const cache = new Cache(
       { prefix: this.name, stepName: options.name, name: fnc.name },
-      this.state,
       options
     );
 
@@ -193,21 +192,21 @@ export default class Runnable {
       return async function (this: any) {
         const _that = this;
         const R =
-          (await cache.get(_that.getEmitter())) ??
+          (await cache.get(_that.state, _that.emitter)) ??
           ((await wrap(...policies).execute(() => {
             return options?.avoidExec
               ? fnc.call(_this, ...arguments)
               : _this._exec(fnc);
           })) as object);
-        await cache.set(R, _that.getEmitter());
+        await cache.set(R, _that.emitter);
         return R;
       };
     } else
       return async function (this: any) {
         const R =
-          (await cache.get(this.getEmitter())) ??
+          (await cache.get(this.state, this.emitter)) ??
           (await fnc.call(_this, ...arguments));
-        await cache.set(R, this.getEmitter());
+        await cache.set(R, this.emitter);
         return R;
       };
   }

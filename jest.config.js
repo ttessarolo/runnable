@@ -3,6 +3,7 @@
 const config = {
   preset: "ts-jest/presets/default-esm",
   testEnvironment: "node",
+  transformIgnorePatterns: ["node_modules/(?!(quick-lru|keyv))"],
   transform: {
     ".js": "jest-esm-transformer-2",
     "^.+\\.tsx?$": [

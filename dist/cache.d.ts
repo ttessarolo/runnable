@@ -2,20 +2,22 @@
 import EventEmitter from "node:events";
 import { WrapOptions, RunState } from "./types.js";
 export default class Cache {
+    private sig?;
     private id?;
     private active?;
     private cache?;
     private config?;
     private key?;
     private ttl?;
-    constructor(id: {
+    constructor(sig: {
         prefix?: string;
         stepName?: string;
         name?: string;
-    }, state?: RunState, config?: WrapOptions);
+    }, config?: WrapOptions);
+    private refresh;
     private checkActive;
     private getCacheKey;
     private getTtl;
-    get(emitter: EventEmitter): Promise<object | null>;
+    get(state: RunState, emitter: EventEmitter): Promise<object | null>;
     set(value: object, emitter: EventEmitter): Promise<void>;
 }

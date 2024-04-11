@@ -85,11 +85,13 @@ export interface RunFncInterface {
     }): Promise<object>;
 }
 export interface RunCache {
+    name: string;
     store?: string | any;
     active?: boolean | Function;
     cacheKeyStrategy?: string[] | Function | z.ZodType;
     ttlStrategy?: number | Function;
     timeout?: number;
+    maxSize?: number;
 }
 export interface WrapOptions {
     name?: string;

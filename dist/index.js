@@ -42,7 +42,7 @@ export default class Runnable {
         this.nodes = params.nodes ?? new Map();
         this.steps = params.steps ?? [];
         this.subEvents = params.subEvents ?? [];
-        this.context = params.context ?? this;
+        this.context = params.context;
         this.runId = params.runId ?? uuidv4();
         this.subEvents.forEach((event) => this.emitter.on(event.name, event.listener));
         this.circuit = params.circuit;
@@ -84,7 +84,7 @@ export default class Runnable {
             return fnc;
         const _this = this;
         const policies = [];
-        const cache = new Cache({ prefix: this.name, stepName: options.name, name: fnc.name }, this.state, options);
+        const cache = new Cache({ prefix: this.name, stepName: options.name, name: fnc.name }, options);
         if (options?.fallback) {
             policies.push(fallback(handleAll, async () => _this._exec(options.fallback)));
         }
@@ -130,21 +130,21 @@ export default class Runnable {
         if (policies.length > 0) {
             return async function () {
                 const _that = this;
-                const R = (await cache.get(_that.getEmitter())) ??
+                const R = (await cache.get(_that.state, _that.emitter)) ??
                     (await wrap(...policies).execute(() => {
                         return options?.avoidExec
                             ? fnc.call(_this, ...arguments)
                             : _this._exec(fnc);
                     }));
-                await cache.set(R, _that.getEmitter());
+                await cache.set(R, _that.emitter);
                 return R;
             };
         }
         else
             return async function () {
-                const R = (await cache.get(this.getEmitter())) ??
+                const R = (await cache.get(this.state, this.emitter)) ??
                     (await fnc.call(_this, ...arguments));
-                await cache.set(R, this.getEmitter());
+                await cache.set(R, this.emitter);
                 return R;
             };
     }

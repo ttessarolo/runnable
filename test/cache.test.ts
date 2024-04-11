@@ -11,19 +11,22 @@ function getEvent(events: string[], prefix: string): number {
 const getChain = (
   name: string = "main-chain",
   cacheParms: RunCache = {
+    name: "cache" + Math.random(),
     active: true,
-    store: "memory",
+    store: undefined,
     cacheKeyStrategy: ["a", "b", "c"],
     ttlStrategy: 10000
   },
   cacheChilds = false,
   nameChilds = false
 ): [Runnable, Map<string, string> | KeyvRedis, string[]] => {
-  const store =
-    typeof cacheParms.store !== "string" ? cacheParms.store : new Map();
+  const store = !["string", "undefined"].includes(typeof cacheParms.store)
+    ? cacheParms.store
+    : new Map();
   const events: string[] = [];
   const runParams: RunnableParams = { name };
   const cache: RunCache = {
+    name: cacheParms.name,
     store,
     active: cacheParms.active,
     cacheKeyStrategy: cacheParms.cacheKeyStrategy,
@@ -88,6 +91,7 @@ test("cache:throw:noname", () => {
 
 test("cache:set", async () => {
   const [chain, store, events] = getChain("hit:seq");
+  await store.clear();
   await chain.run({ a: 0 });
   const chached = store.get("runnify:hit:seq:start:iterate:a:b:c") ?? "";
   expect(getEvent(events, "hit")).toEqual(0);
@@ -102,6 +106,7 @@ test("cache:set", async () => {
 
 test("cache:get", async () => {
   const [chain, store, events] = getChain("hit:seq");
+  await store.clear();
   await chain.run({ a: 0 });
   await chain.run({ a: 0 });
   const chached = store.get("runnify:hit:seq:start:iterate:a:b:c") ?? "";
@@ -118,6 +123,7 @@ test("cache:get", async () => {
 test("cache:get:redis", async () => {
   const keyvRedis = new KeyvRedis("redis://localhost:6379");
   const [chain, store, events] = getChain("hit:seq", {
+    name: "redis-cache",
     active: true,
     store: keyvRedis,
     cacheKeyStrategy: ["a", "b", "c"],
@@ -142,12 +148,14 @@ test("cache:get:redis", async () => {
 
 test("cache:get:childs:throw", async () => {
   expect(async () => {
-    getChain("hit:seq", undefined, true);
+    const [chain] = getChain("hit:seq", undefined, true);
+    await chain.run({ a: 0 });
   }).rejects.toThrow();
 });
 
 test("cache:get:childs", async () => {
   const [chain, store, events] = getChain("hit:seq", undefined, true, true);
+  await store.clear();
   await chain.run({ a: 0 });
   await chain.run({ a: 0 });
   const chached1 = store.get("runnify:hit:seq:push:b:pusha:a:b:c") ?? "";
