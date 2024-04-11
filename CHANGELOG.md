@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.16](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.15%0Dv1.6.16) (2024-04-11)
+
+
+### Bug Fixes
+
+* cache keys extraction ([dc744ed](https://github.com/ttessarolo/runnable/commits/dc744ed26fafe2fe4ad6157d907a2ea4c154c38f))
+
+
+### Others
+
+* doc ([0559345](https://github.com/ttessarolo/runnable/commits/05593456c1dc8c2b5c7ad3d8e82275130c698d42))
+* **release:** 1.6.15 ([2e7b6f1](https://github.com/ttessarolo/runnable/commits/2e7b6f195a69e6451af27ffaa05efc731c042bbe))
+
 ### [1.6.15](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.14%0Dv1.6.15) (2024-04-11)
 
 
