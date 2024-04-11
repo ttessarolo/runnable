@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.15](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.14%0Dv1.6.15) (2024-04-11)
+
+
+### Others
+
+* cacheFactory ([3b7db73](https://github.com/ttessarolo/runnable/commits/3b7db73a8cee2e310ad7458ee787938f038d2a8a))
+
 ### [1.6.14](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.13%0Dv1.6.14) (2024-04-10)
 
 
