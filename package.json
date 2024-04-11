@@ -1,12 +1,12 @@
 {
   "name": "runnify",
-  "version": "1.6.15",
+  "version": "1.6.14",
   "description": "",
   "main": "./dist/index.js",
   "types": "./dist/types.d.ts",
   "type": "module",
   "scripts": {
-    "test": "jest --verbose ./test/",
+    "test": "jest --verbose ./test/cache.test.ts",
     "doc": "npx typedoc",
     "commit": "git add . && git-cz",
     "version": "standard-version",

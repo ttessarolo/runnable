@@ -1,3 +1,4 @@
+import get from "lodash.get";
 import { RunState } from "./types.js";
 import Runnable from "./index.js";
 
@@ -24,9 +25,9 @@ export const stringifyState = (obj: RunState) => {
 export const stringifyKeys = (obj: RunState, keys: Array<string>) => {
   const chiavi = [];
   for (const key of keys) {
-    if (obj[key]) {
+    if (get(obj, key) !== undefined) {
       chiavi.push(`${key}:${obj[key]}`);
     }
   }
-  return keys.join(":");
+  return chiavi.join(":");
 };

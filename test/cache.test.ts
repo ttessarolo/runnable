@@ -93,7 +93,7 @@ test("cache:set", async () => {
   const [chain, store, events] = getChain("hit:seq");
   await store.clear();
   await chain.run({ a: 0 });
-  const chached = store.get("runnify:hit:seq:start:iterate:a:b:c") ?? "";
+  const chached = store.get("runnify:hit:seq:start:iterate:a:0") ?? "";
   expect(getEvent(events, "hit")).toEqual(0);
   expect(getEvent(events, "miss")).toEqual(1);
   expect(getEvent(events, "set")).toEqual(1);
@@ -109,7 +109,7 @@ test("cache:get", async () => {
   await store.clear();
   await chain.run({ a: 0 });
   await chain.run({ a: 0 });
-  const chached = store.get("runnify:hit:seq:start:iterate:a:b:c") ?? "";
+  const chached = store.get("runnify:hit:seq:start:iterate:a:0") ?? "";
   expect(getEvent(events, "hit")).toEqual(1);
   expect(getEvent(events, "miss")).toEqual(1);
   expect(getEvent(events, "set")).toEqual(2);
@@ -132,8 +132,7 @@ test("cache:get:redis", async () => {
   await store.clear();
   await chain.run({ a: 0 });
   await chain.run({ a: 0 });
-  const chached =
-    (await store.get("runnify:hit:seq:start:iterate:a:b:c")) ?? "";
+  const chached = (await store.get("runnify:hit:seq:start:iterate:a:0")) ?? "";
   await (store as KeyvRedis).disconnect();
 
   expect(getEvent(events, "hit")).toEqual(1);
@@ -158,8 +157,8 @@ test("cache:get:childs", async () => {
   await store.clear();
   await chain.run({ a: 0 });
   await chain.run({ a: 0 });
-  const chached1 = store.get("runnify:hit:seq:push:b:pusha:a:b:c") ?? "";
-  const chached2 = store.get("runnify:hit:seq:push:c:pushb:a:b:c") ?? "";
+  const chached1 = store.get("runnify:hit:seq:push:b:pusha:a:0") ?? "";
+  const chached2 = store.get("runnify:hit:seq:push:c:pushb:a:0:b:1") ?? "";
 
   expect(getEvent(events, "hit")).toEqual(2);
   expect(getEvent(events, "miss")).toEqual(2);

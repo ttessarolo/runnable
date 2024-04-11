@@ -1,3 +1,4 @@
+import get from "lodash.get";
 import Runnable from "./index.js";
 export const sleep = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
 export const isFunc = (obj) => obj instanceof Function || obj instanceof Promise;
@@ -13,9 +14,9 @@ export const stringifyState = (obj) => {
 export const stringifyKeys = (obj, keys) => {
     const chiavi = [];
     for (const key of keys) {
-        if (obj[key]) {
+        if (get(obj, key) !== undefined) {
             chiavi.push(`${key}:${obj[key]}`);
         }
     }
-    return keys.join(":");
+    return chiavi.join(":");
 };
