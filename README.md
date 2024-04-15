@@ -22,7 +22,7 @@ It has the following features:
 - Use Zod to manipulate the state
 
 ## Documentations
-🚀 Read full docs [here](https://ttessarolo.github.io/runnable/)
+🚀 Read full docs [here](https://ttessarolo.github.io/runnify/)
 
 ## Install
 
