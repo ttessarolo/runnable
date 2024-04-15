@@ -1,5 +1,3 @@
-import Runnable from "./index.js";
-export { Runnable };
 export var StepType;
 (function (StepType) {
     StepType["START"] = "start";

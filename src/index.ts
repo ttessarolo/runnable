@@ -36,13 +36,14 @@ import {
 // Others
 // https://github.com/genesys/mollitia
 // https://github.com/Diplomatiq/resily
-import { isExecutable, isFunc } from "./utils.js";
+import { isExecutable, isFunc, sleep } from "./utils.js";
 import Cache, { cacheFactory } from "./cache.js";
 import {
   RunState,
   StepType,
   SwitchCase,
   StepOptions,
+  RunFncParams,
   Roote,
   Step,
   StepEvent,
@@ -92,7 +93,7 @@ export default class Runnable {
     this.nodes = params.nodes ?? new Map();
     this.steps = params.steps ?? [];
     this.subEvents = params.subEvents ?? [];
-    this.context = params.context;
+    this.context = params.ctx;
     this.runId = params.runId ?? uuidv4();
     this.subEvents.forEach((event: EventType) =>
       this.emitter.on(event.name, event.listener)
@@ -430,7 +431,7 @@ export default class Runnable {
     return fnc instanceof Runnable
       ? await fnc.run(stato, {
           emitter: this.emitter,
-          context: this.context,
+          ctx: this.context,
           runId: this.runId
         })
       : await this.tracer.startActiveSpan(
@@ -445,8 +446,8 @@ export default class Runnable {
               }
               const response = await fnc.call(this, stato, {
                 emit: this.emitter.emit.bind(this.emitter),
-                _this: this.context
-              });
+                ctx: this.context
+              } as RunFncParams);
               if (span.isRecording()) {
                 if (span.isRecording()) {
                   span.addEvent(JSON.stringify(response));
@@ -595,7 +596,7 @@ export default class Runnable {
       const element = _loop[i];
       const runnable = Runnable.init({
         emitter: this.emitter,
-        context: this.context,
+        ctx: this.context,
         runId: this.runId,
         name: `${this.name}:loop:${key}:${i}`
       });
@@ -678,6 +679,7 @@ export default class Runnable {
               case StepType.START:
               case StepType.MILESTONE:
               case StepType.END:
+                await sleep(1);
                 break;
               case StepType.PIPE:
                 await this._pipe(step, options);
@@ -745,7 +747,7 @@ export default class Runnable {
       nodes: params.nodes ?? this.nodes,
       steps: params.steps ?? this.steps,
       subEvents: params.subEvents ?? this.subEvents,
-      context: this.context,
+      ctx: this.context,
       circuit: params.circuit ?? this.circuit
     };
 
@@ -801,7 +803,7 @@ export default class Runnable {
     );
   }
 
-  async *streamLog(
+  async *streamSteps(
     state?: RunState,
     params: RunnableParams = {}
   ): AsyncGenerator<StepEvent> {

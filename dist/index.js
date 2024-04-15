@@ -1,3 +1,7 @@
+/**
+ * @module Runnable
+ * @description Runnable is a library for building and running complex pipelines of functions and runnables.
+ */
 import EventEmitter, { on } from "node:events";
 import { performance } from "node:perf_hooks";
 import { z } from "zod";
@@ -12,9 +16,17 @@ import { ConsecutiveBreaker, SamplingBreaker, ExponentialBackoff, TimeoutStrateg
 // Others
 // https://github.com/genesys/mollitia
 // https://github.com/Diplomatiq/resily
-import { isExecutable, isFunc } from "./utils.js";
+import { isExecutable, isFunc, sleep } from "./utils.js";
 import Cache, { cacheFactory } from "./cache.js";
 import { StepType, IteratorError } from "./types.js";
+/**
+ * @class Runnable
+ * @description Runnable class for building and running complex pipelines of functions and runnables.
+ * @example const r = new Runnable({ a: 1 });
+ * await r.run();
+ * @example const r = new Runnable({ a: 1 }, { name: "myRunnable" });
+ * await r.run();
+ **/
 export default class Runnable {
     name;
     state;
@@ -42,7 +54,7 @@ export default class Runnable {
         this.nodes = params.nodes ?? new Map();
         this.steps = params.steps ?? [];
         this.subEvents = params.subEvents ?? [];
-        this.context = params.context;
+        this.context = params.ctx;
         this.runId = params.runId ?? uuidv4();
         this.subEvents.forEach((event) => this.emitter.on(event.name, event.listener));
         this.circuit = params.circuit;
@@ -332,7 +344,7 @@ export default class Runnable {
         return fnc instanceof Runnable
             ? await fnc.run(stato, {
                 emitter: this.emitter,
-                context: this.context,
+                ctx: this.context,
                 runId: this.runId
             })
             : await this.tracer.startActiveSpan(`${this.name}:func:exec${fnc.name ? `:${fnc.name.replace("bound ", "")}` : ""}`, async (span) => {
@@ -343,7 +355,7 @@ export default class Runnable {
                     }
                     const response = await fnc.call(this, stato, {
                         emit: this.emitter.emit.bind(this.emitter),
-                        _this: this.context
+                        ctx: this.context
                     });
                     if (span.isRecording()) {
                         if (span.isRecording()) {
@@ -454,7 +466,7 @@ export default class Runnable {
             const element = _loop[i];
             const runnable = Runnable.init({
                 emitter: this.emitter,
-                context: this.context,
+                ctx: this.context,
                 runId: this.runId,
                 name: `${this.name}:loop:${key}:${i}`
             });
@@ -522,6 +534,7 @@ export default class Runnable {
                         case StepType.START:
                         case StepType.MILESTONE:
                         case StepType.END:
+                            await sleep(1);
                             break;
                         case StepType.PIPE:
                             await this._pipe(step, options);
@@ -586,7 +599,7 @@ export default class Runnable {
             nodes: params.nodes ?? this.nodes,
             steps: params.steps ?? this.steps,
             subEvents: params.subEvents ?? this.subEvents,
-            context: this.context,
+            ctx: this.context,
             circuit: params.circuit ?? this.circuit
         };
         const runnable = new Runnable(stato, options);
@@ -633,7 +646,7 @@ export default class Runnable {
     stream(params = {}) {
         return mapper((state) => this.run(state, params), params.highWaterMark ?? 16);
     }
-    async *streamLog(state, params = {}) {
+    async *streamSteps(state, params = {}) {
         const rnb = this.clone(state, params);
         const emitter = rnb.getEmitter();
         rnb.iterate();

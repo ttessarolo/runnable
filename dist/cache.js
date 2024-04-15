@@ -49,7 +49,9 @@ export class CacheFactory {
         }
     }
 }
+/** @ignore */
 export const cacheFactory = new CacheFactory();
+/** @ignore */
 export default class Cache {
     sig;
     id;

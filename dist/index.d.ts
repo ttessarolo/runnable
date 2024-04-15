@@ -1,8 +1,20 @@
 /// <reference types="node" resolution-mode="require"/>
+/**
+ * @module Runnable
+ * @description Runnable is a library for building and running complex pipelines of functions and runnables.
+ */
 import EventEmitter from "node:events";
 import { z } from "zod";
 import { Tracer, Meter } from "@opentelemetry/api";
 import { RunState, SwitchCase, StepOptions, Roote, StepEvent, StreamTransformer, CacheFactoryType, RunnableParams } from "./types.js";
+/**
+ * @class Runnable
+ * @description Runnable class for building and running complex pipelines of functions and runnables.
+ * @example const r = new Runnable({ a: 1 });
+ * await r.run();
+ * @example const r = new Runnable({ a: 1 }, { name: "myRunnable" });
+ * await r.run();
+ **/
 export default class Runnable {
     private name?;
     private state;
@@ -74,7 +86,7 @@ export default class Runnable {
     invoke(state?: RunState, params?: RunnableParams): Promise<any>;
     run(state?: RunState, params?: RunnableParams): Promise<any>;
     stream(params?: RunnableParams): StreamTransformer;
-    streamLog(state?: RunState, params?: RunnableParams): AsyncGenerator<StepEvent>;
+    streamSteps(state?: RunState, params?: RunnableParams): AsyncGenerator<StepEvent>;
     static getCacheFactory(): CacheFactoryType;
     static from(steps: any[], params?: RunnableParams): Runnable;
     static init(params?: RunnableParams): Runnable;

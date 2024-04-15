@@ -3,7 +3,8 @@ import EventEmitter from "node:events";
 import { z } from "zod";
 import Runnable from "./index.js";
 import { CacheFactory } from "./cache.js";
-export { Runnable };
+export type { Tracer, Meter } from "@opentelemetry/api";
+export type { Runnable };
 export type CacheFactoryType = CacheFactory;
 export type RunState = Record<string, unknown>;
 export declare enum StepType {
@@ -53,9 +54,7 @@ export type StepEvent = {
     type: string;
     origin?: string;
     tags?: string[];
-    state: {
-        [key: string]: any;
-    };
+    state: RunState;
 };
 export type Iteration = {
     value: Step | null;
@@ -76,15 +75,14 @@ export type RunnableParams = {
     steps?: Step[];
     subEvents?: EventType[];
     highWaterMark?: number;
-    context?: any;
+    ctx?: any;
     runId?: string;
     circuit?: WrapOptions;
 };
 export type StreamTransformer = (iterator: any) => AsyncGenerator<any, void, unknown>;
-export interface RunFncInterface {
-    (state: object, params: {
-        emit: (arg1: string | symbol, arg2: any) => void;
-    }): Promise<object>;
+export interface RunFncParams {
+    emit: (arg1: string | symbol, arg2: any) => void;
+    ctx: any;
 }
 export interface RunCache {
     name: string;

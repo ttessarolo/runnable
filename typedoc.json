@@ -3,7 +3,7 @@
   "name": "Runnify",
   "includeVersion": true,
   "entryPoints": ["./src/index.ts", "./src/types.ts", "./src/cache.ts"],
-  "out": "doc",
+  "out": "docs",
   "excludePrivate": true,
   "visibilityFilters": {
     "protected": false,

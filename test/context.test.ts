@@ -1,8 +1,9 @@
 import { expect, test } from "@jest/globals";
 import Runnable from "../dist/index.js";
+import { RunFncParams } from "../dist/types.js";
 import "./utils/instrumentation.js";
 
-const context = {
+const ctx = {
   config: {
     get: async (key: string) => "value"
   },
@@ -18,12 +19,12 @@ const result = {
   remote: "ingress"
 };
 
-const main = Runnable.init({ name: "context:main:seq", context }).assign({
-  conf: async function (state: any, contex: any) {
-    return await contex._this.config.get("key");
+const main = Runnable.init({ name: "context:main:seq", ctx }).assign({
+  conf: async function (state: any, params: RunFncParams) {
+    return await params.ctx.config.get("key");
   },
-  remote: async function (state: any, context: any) {
-    return await context._this.gRPC.ingress.get("key");
+  remote: async function (state: any, params: RunFncParams) {
+    return await params.ctx.gRPC.ingress.get("key");
   }
 });
 

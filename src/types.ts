@@ -55,7 +55,7 @@ export type StepEvent = {
   type: string;
   origin?: string;
   tags?: string[];
-  state: { [key: string]: any };
+  state: RunState;
 };
 
 export type Iteration = {
@@ -80,7 +80,7 @@ export type RunnableParams = {
   steps?: Step[];
   subEvents?: EventType[];
   highWaterMark?: number;
-  context?: any;
+  ctx?: any;
   runId?: string;
   circuit?: WrapOptions;
 };
@@ -89,11 +89,9 @@ export type StreamTransformer = (
   iterator: any
 ) => AsyncGenerator<any, void, unknown>;
 
-export interface RunFncInterface {
-  (
-    state: object,
-    params: { emit: (arg1: string | symbol, arg2: any) => void }
-  ): Promise<object>;
+export interface RunFncParams {
+  emit: (arg1: string | symbol, arg2: any) => void;
+  ctx: any;
 }
 
 export interface RunCache {
