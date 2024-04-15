@@ -58,8 +58,8 @@ profile*
 *flamegraph*
 
 # lock files
-yarn.lock
-package-lock.json
+# yarn.lock
+# package-lock.json
 
 # generated code
 examples/typescript-server.js
