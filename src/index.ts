@@ -796,6 +796,11 @@ export default class Runnable {
       });
   }
 
+  /**
+   * Creates a StreamTransformer for running the code.
+   * @param params - Optional parameters for the runnable.
+   * @returns A StreamTransformer instance.
+   */
   stream(params: RunnableParams = {}): StreamTransformer {
     return mapper(
       (state?: RunState) => this.run(state, params),
