@@ -13,9 +13,19 @@
     "push": "git push --follow-tags",
     "release": "npm run commit && npm run version && npm run push && npm publish"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ttessarolo/runnify.git"
+  },
+  "keywords": [
+    "runnable",
+    "chain",
+    "step function",
+    "transformer",
+    "zod",
+    "opentelemetry"
+  ],
+  "author": "Tommaso Tessarolo <ttessarolo@gmail.com>",
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "@keyv/redis": "^2.8.4",
