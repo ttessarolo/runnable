@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.21](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.20%0Dv1.6.21) (2024-04-15)
+
+
+### Docs
+
+* updated docs ([4c31b95](https://github.com/ttessarolo/runnable/commits/4c31b953570d0ee5e9d22427074e7c47a1ea5ca0))
+
 ### [1.6.20](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.19%0Dv1.6.20) (2024-04-15)
 
 
