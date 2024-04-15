@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.19](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.18%0Dv1.6.19) (2024-04-15)
+
+
+### Others
+
+* push package-lock ([a0a5db5](https://github.com/ttessarolo/runnable/commits/a0a5db5b18bc54fafd0e318bebace58f81f942d7))
+
 ### [1.6.18](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.17%0Dv1.6.18) (2024-04-15)
 
 
