@@ -21,6 +21,9 @@ It has the following features:
 - Nest chains within chains
 - Use Zod to manipulate the state
 
+## Documentations
+🚀 Read full docs [here](https://ttessarolo.github.io/runnable/)
+
 ## Install
 
 ```javascript
