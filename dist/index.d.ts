@@ -2,7 +2,7 @@
 import EventEmitter from "node:events";
 import { z } from "zod";
 import { Tracer, Meter } from "@opentelemetry/api";
-import { RunState, SwitchCase, StepOptions, Roote, StepEvent, StreamTransformer, RunnableParams } from "./types.js";
+import { RunState, SwitchCase, StepOptions, Roote, StepEvent, StreamTransformer, CacheFactoryType, RunnableParams } from "./types.js";
 export default class Runnable {
     private name?;
     private state;
@@ -75,6 +75,7 @@ export default class Runnable {
     run(state?: RunState, params?: RunnableParams): Promise<any>;
     stream(params?: RunnableParams): StreamTransformer;
     streamLog(state?: RunState, params?: RunnableParams): AsyncGenerator<StepEvent>;
+    static getCacheFactory(): CacheFactoryType;
     static from(steps: any[], params?: RunnableParams): Runnable;
     static init(params?: RunnableParams): Runnable;
 }

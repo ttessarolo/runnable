@@ -1,7 +1,8 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "name": "Runnify",
-  "entryPoints": ["./src/index.ts", "./src/types.ts"],
+  "includeVersion": true,
+  "entryPoints": ["./src/index.ts", "./src/types.ts", "./src/cache.ts"],
   "out": "doc",
   "excludePrivate": true,
   "visibilityFilters": {

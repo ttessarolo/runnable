@@ -13,7 +13,7 @@ import { ConsecutiveBreaker, SamplingBreaker, ExponentialBackoff, TimeoutStrateg
 // https://github.com/genesys/mollitia
 // https://github.com/Diplomatiq/resily
 import { isExecutable, isFunc } from "./utils.js";
-import Cache from "./cache.js";
+import Cache, { cacheFactory } from "./cache.js";
 import { StepType, IteratorError } from "./types.js";
 export default class Runnable {
     name;
@@ -640,6 +640,9 @@ export default class Runnable {
         for await (const [iteration] of on(emitter, "step")) {
             yield iteration;
         }
+    }
+    static getCacheFactory() {
+        return cacheFactory;
     }
     static from(steps, params = {}) {
         const r = new Runnable({}, params);

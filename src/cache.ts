@@ -1,11 +1,16 @@
+/**
+ * @module Cache
+ * @description Cache class for Runnify
+ */
 import EventEmitter from "node:events";
 import Keyv from "keyv";
 import QuickLRU from "quick-lru";
 import { z } from "zod";
+import pTimeout from "p-timeout";
 import { WrapOptions, RunCache, RunState } from "./types.js";
 import { stringifyState, stringifyKeys, isFunc } from "./utils.js";
 
-class CacheFactory {
+export class CacheFactory {
   private cache: QuickLRU<string, Keyv>;
 
   constructor() {
@@ -25,7 +30,7 @@ class CacheFactory {
         store:
           typeof config.store !== "string"
             ? config.store
-            : new QuickLRU({ maxSize: 1000 }),
+            : new QuickLRU({ maxSize: config.maxSize ?? 1000 }),
         namespace: "runnify"
       };
       const cache = new Keyv(opts);
@@ -33,9 +38,36 @@ class CacheFactory {
       return cache;
     }
   }
-}
 
-const cacheFactory = new CacheFactory();
+  clear(name: string): void {
+    const cache = this.cache.get(name);
+    if (cache) {
+      cache.clear();
+    }
+  }
+
+  clearAll(): void {
+    for (const cache of this.cache.values()) {
+      cache.clear();
+    }
+  }
+
+  disconnect(name: string): void {
+    const cache = this.cache.get(name);
+    if (cache) {
+      cache.disconnect();
+    }
+  }
+
+  disconnectAll(): void {
+    for (const cache of this.cache.values()) {
+      cache.disconnect();
+    }
+  }
+}
+/** @ignore */
+export const cacheFactory = new CacheFactory();
+/** @ignore */
 export default class Cache {
   private sig?: { prefix?: string; stepName?: string; name?: string };
   private id?: string;
@@ -44,6 +76,7 @@ export default class Cache {
   private config?: RunCache | undefined;
   private key?: string;
   private ttl?: number;
+  private timeout?: number;
 
   constructor(
     sig: { prefix?: string; stepName?: string; name?: string },
@@ -63,6 +96,7 @@ export default class Cache {
     await this.checkActive(state);
     if (this.active) {
       if (!this.cache) this.cache = cacheFactory.getCache(this.config);
+      this.timeout = this.config?.timeout;
       await Promise.all([this.getCacheKey(state), this.getTtl(state)]);
     }
   }
@@ -120,7 +154,19 @@ export default class Cache {
     await this.refresh(state);
 
     if (this.active && this.key) {
-      const R = await this.cache?.get(this.key);
+      const R = this.timeout
+        ? await pTimeout(
+            this.cache?.get(this.key) as Promise<object | undefined>,
+            {
+              milliseconds: this.timeout
+            }
+          ).catch(() => {
+            if (emitter) {
+              emitter.emit("cache:get:timeout", this.key);
+            }
+            return null;
+          })
+        : await this.cache?.get(this.key);
       if (emitter) {
         if (R) emitter.emit("cache:hit", this.key);
         else emitter.emit("cache:miss", this.key);
@@ -130,12 +176,30 @@ export default class Cache {
     return null;
   }
 
-  async set(value: object, emitter: EventEmitter): Promise<void> {
+  async set(
+    value: object,
+    emitter: EventEmitter
+  ): Promise<boolean | undefined> {
     if (this.active && this.key && value) {
-      await this.cache?.set(this.key, value, this.ttl);
+      const res = this.timeout
+        ? await pTimeout(
+            this.cache?.set(this.key, value, this.ttl) as Promise<
+              true | undefined
+            >,
+            {
+              milliseconds: this.timeout
+            }
+          ).catch(() => {
+            if (emitter) {
+              emitter.emit("cache:set:timeout", this.key);
+            }
+            return undefined;
+          })
+        : await this.cache?.set(this.key, value, this.ttl);
       if (emitter) {
         emitter.emit("cache:set", this.key);
       }
+      return res;
     }
   }
 }

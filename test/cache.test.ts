@@ -15,7 +15,8 @@ const getChain = (
     active: true,
     store: undefined,
     cacheKeyStrategy: ["a", "b", "c"],
-    ttlStrategy: 10000
+    ttlStrategy: 10000,
+    timeout: undefined
   },
   cacheChilds = false,
   nameChilds = false
@@ -30,7 +31,8 @@ const getChain = (
     store,
     active: cacheParms.active,
     cacheKeyStrategy: cacheParms.cacheKeyStrategy,
-    ttlStrategy: cacheParms.ttlStrategy
+    ttlStrategy: cacheParms.ttlStrategy,
+    timeout: cacheParms.timeout
   };
   if (!cacheChilds) runParams.circuit = { cache };
   const runnable = Runnable.init(runParams)
@@ -40,12 +42,15 @@ const getChain = (
     .on("cache:miss", function onChacheMiss(key: string) {
       events.push(`cache:miss:${key}`);
     })
+    .on("chache:get:timeout", function onStep(step: any) {
+      events.push(`step:${step.name}`);
+    })
     .on("cache:set", function onChacheSet(key: string) {
       events.push(`cache:set:${key}`);
+    })
+    .on("chache:set:timeout", function onStep(step: any) {
+      events.push(`step:${step.name}`);
     });
-  // .on("step", function onStep(step: any) {
-  //   events.push(`step:${step.name}`);
-  // });
 
   if (nameChilds) {
     runnable

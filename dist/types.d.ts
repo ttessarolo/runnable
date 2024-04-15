@@ -2,7 +2,9 @@
 import EventEmitter from "node:events";
 import { z } from "zod";
 import Runnable from "./index.js";
+import { CacheFactory } from "./cache.js";
 export { Runnable };
+export type CacheFactoryType = CacheFactory;
 export type RunState = Record<string, unknown>;
 export declare enum StepType {
     START = "start",

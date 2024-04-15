@@ -1,8 +1,9 @@
 import Keyv from "keyv";
 import QuickLRU from "quick-lru";
 import { z } from "zod";
+import pTimeout from "p-timeout";
 import { stringifyState, stringifyKeys, isFunc } from "./utils.js";
-class CacheFactory {
+export class CacheFactory {
     cache;
     constructor() {
         this.cache = new QuickLRU({ maxSize: 100 });
@@ -17,7 +18,7 @@ class CacheFactory {
                 uri: typeof config.store === "string" ? config.store : undefined,
                 store: typeof config.store !== "string"
                     ? config.store
-                    : new QuickLRU({ maxSize: 1000 }),
+                    : new QuickLRU({ maxSize: config.maxSize ?? 1000 }),
                 namespace: "runnify"
             };
             const cache = new Keyv(opts);
@@ -25,8 +26,30 @@ class CacheFactory {
             return cache;
         }
     }
+    clear(name) {
+        const cache = this.cache.get(name);
+        if (cache) {
+            cache.clear();
+        }
+    }
+    clearAll() {
+        for (const cache of this.cache.values()) {
+            cache.clear();
+        }
+    }
+    disconnect(name) {
+        const cache = this.cache.get(name);
+        if (cache) {
+            cache.disconnect();
+        }
+    }
+    disconnectAll() {
+        for (const cache of this.cache.values()) {
+            cache.disconnect();
+        }
+    }
 }
-const cacheFactory = new CacheFactory();
+export const cacheFactory = new CacheFactory();
 export default class Cache {
     sig;
     id;
@@ -35,6 +58,7 @@ export default class Cache {
     config;
     key;
     ttl;
+    timeout;
     constructor(sig, config) {
         this.sig = sig;
         this.config = config?.cache;
@@ -48,6 +72,7 @@ export default class Cache {
         if (this.active) {
             if (!this.cache)
                 this.cache = cacheFactory.getCache(this.config);
+            this.timeout = this.config?.timeout;
             await Promise.all([this.getCacheKey(state), this.getTtl(state)]);
         }
     }
@@ -95,7 +120,16 @@ export default class Cache {
     async get(state, emitter) {
         await this.refresh(state);
         if (this.active && this.key) {
-            const R = await this.cache?.get(this.key);
+            const R = this.timeout
+                ? await pTimeout(this.cache?.get(this.key), {
+                    milliseconds: this.timeout
+                }).catch(() => {
+                    if (emitter) {
+                        emitter.emit("cache:get:timeout", this.key);
+                    }
+                    return null;
+                })
+                : await this.cache?.get(this.key);
             if (emitter) {
                 if (R)
                     emitter.emit("cache:hit", this.key);
@@ -108,10 +142,20 @@ export default class Cache {
     }
     async set(value, emitter) {
         if (this.active && this.key && value) {
-            await this.cache?.set(this.key, value, this.ttl);
+            const res = this.timeout
+                ? await pTimeout(this.cache?.set(this.key, value, this.ttl), {
+                    milliseconds: this.timeout
+                }).catch(() => {
+                    if (emitter) {
+                        emitter.emit("cache:set:timeout", this.key);
+                    }
+                    return undefined;
+                })
+                : await this.cache?.set(this.key, value, this.ttl);
             if (emitter) {
                 emitter.emit("cache:set", this.key);
             }
+            return res;
         }
     }
 }

@@ -1,3 +1,7 @@
+/**
+ * @module Runnable
+ * @description Runnable is a library for building and running complex pipelines of functions and runnables.
+ */
 import EventEmitter, { on } from "node:events";
 import { performance } from "node:perf_hooks";
 import { z } from "zod";
@@ -33,7 +37,7 @@ import {
 // https://github.com/genesys/mollitia
 // https://github.com/Diplomatiq/resily
 import { isExecutable, isFunc } from "./utils.js";
-import Cache from "./cache.js";
+import Cache, { cacheFactory } from "./cache.js";
 import {
   RunState,
   StepType,
@@ -45,12 +49,21 @@ import {
   Iteration,
   IteratorFunction,
   StreamTransformer,
+  CacheFactoryType,
   EventType,
   RunnableParams,
   WrapOptions,
   IteratorError
 } from "./types.js";
 
+/**
+ * @class Runnable
+ * @description Runnable class for building and running complex pipelines of functions and runnables.
+ * @example const r = new Runnable({ a: 1 });
+ * await r.run();
+ * @example const r = new Runnable({ a: 1 }, { name: "myRunnable" });
+ * await r.run();
+ **/
 export default class Runnable {
   private name?: string;
   private state: RunState;
@@ -799,6 +812,10 @@ export default class Runnable {
     for await (const [iteration] of on(emitter, "step")) {
       yield iteration;
     }
+  }
+
+  static getCacheFactory(): CacheFactoryType {
+    return cacheFactory;
   }
 
   static from(steps: any[], params: RunnableParams = {}) {
