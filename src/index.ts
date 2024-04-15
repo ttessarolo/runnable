@@ -761,10 +761,25 @@ export default class Runnable {
     return true;
   }
 
+  /**
+   * Invokes the runnable with the given state and parameters.
+   *
+   * @param state - The state to be passed to the runnable.
+   * @param params - The parameters to be passed to the runnable. Default is an empty object.
+   * @returns A promise that resolves with the result of the runnable.
+   */
   async invoke(state?: RunState, params: RunnableParams = {}) {
     return this.run(state, params);
   }
 
+  /**
+   * Runs the `Runnable` instance.
+   *
+   * @param state - The initial state for the `Runnable` instance.
+   * @param params - Additional parameters for the `Runnable` instance.
+   * @returns A promise that resolves to the fallback value or the state of the `Runnable` instance.
+   * @throws If an error occurs during execution.
+   */
   async run(state?: RunState, params: RunnableParams = {}) {
     const startTime = new Date().getTime();
     const rnb = this.clone(state, params);
