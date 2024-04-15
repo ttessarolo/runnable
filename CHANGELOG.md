@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.25](https://bitbucket.org/ttessarolo/runnify/branches/compare/v1.6.24%0Dv1.6.25) (2024-04-15)
+
+
+### Others
+
+* update package.json ([7a77503](https://github.com/ttessarolo/runnify/commits/7a7750380777a37dd735770dd4daa317d6ad0d02))
+
 ### [1.6.24](https://bitbucket.org/ttessarolo/runnify/branches/compare/v1.6.23%0Dv1.6.24) (2024-04-15)
 
 
