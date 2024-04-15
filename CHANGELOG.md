@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.6.23](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.22%0Dv1.6.23) (2024-04-15)
+
+
+### Docs
+
+* **get rid of docs folder:** get rid of docs folder ([9d4234f](https://github.com/ttessarolo/runnable/commits/9d4234fcbb54c4753dfefd236f10d802c677ecdf))
+
 ### [1.6.22](https://bitbucket.org/ttessarolo/runnable/branches/compare/v1.6.21%0Dv1.6.22) (2024-04-15)
 
 
