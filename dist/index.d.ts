@@ -26,12 +26,12 @@ export default class Runnable {
     private nodes;
     private iteractionCount;
     private subEvents;
-    private context;
+    private ctx;
     private tracer;
     private meter;
     private runDuration;
     private runId;
-    private aborted;
+    private signal?;
     private wrappedFncs;
     private circuit?;
     private constructor();
@@ -81,10 +81,23 @@ export default class Runnable {
     private stepsIterator;
     private emitStep;
     private iterate;
+    private getBasicParams;
     private clone;
     static isRunnable(): boolean;
-    invoke(state?: RunState, params?: RunnableParams): Promise<any>;
-    run(state?: RunState, params?: RunnableParams): Promise<any>;
+    /**
+     * Invokes/Run the runnable with the given state and parameters.
+     *
+     * @param state - The state to be passed to the runnable.
+     * @param params - The parameters to be passed to the runnable. Default is an empty object.
+     * @returns A promise that resolves with the result of the runnable.
+     */
+    invoke(state?: RunState, params?: RunnableParams): Promise<unknown>;
+    run(state?: RunState, params?: RunnableParams): Promise<unknown>;
+    /**
+     * Creates a StreamTransformer for running the code.
+     * @param params - Optional parameters for the runnable.
+     * @returns A StreamTransformer instance.
+     */
     stream(params?: RunnableParams): StreamTransformer;
     streamSteps(state?: RunState, params?: RunnableParams): AsyncGenerator<StepEvent>;
     static getCacheFactory(): CacheFactoryType;

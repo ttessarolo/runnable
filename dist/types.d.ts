@@ -77,12 +77,14 @@ export type RunnableParams = {
     highWaterMark?: number;
     ctx?: any;
     runId?: string;
+    signal?: AbortSignal;
     circuit?: WrapOptions;
 };
 export type StreamTransformer = (iterator: any) => AsyncGenerator<any, void, unknown>;
 export interface RunFncParams {
     emit: (arg1: string | symbol, arg2: any) => void;
     ctx: any;
+    signal: AbortSignal;
 }
 export interface RunCache {
     name: string;
@@ -114,5 +116,8 @@ export interface WrapOptions {
     timeout?: number;
 }
 export declare class IteratorError extends Error {
+    constructor(message: string);
+}
+export declare class RunnableAbortError extends Error {
     constructor(message: string);
 }

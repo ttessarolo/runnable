@@ -19,3 +19,9 @@ export class IteratorError extends Error {
         this.name = "IterateError";
     }
 }
+export class RunnableAbortError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "RunnableAbortError";
+    }
+}

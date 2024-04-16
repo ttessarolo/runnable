@@ -19,6 +19,7 @@ It has the following features:
 - Execute loops for iterable state objects (eg. Arrays)
 - Pass a context to the chain to make it available to all steps 
 - Nest chains within chains
+- Use signal to Abort chain run
 - Use Zod to manipulate the state
 
 ## Documentations
@@ -35,11 +36,13 @@ npm install runnify
 - [Chain with nested chains](#nested-chains)
 - [Loops](#loops)
 - [Streaming](#streaming)
-- [Retry, Cache, Fallback and Timeout](#circuit)
+- [Retry, Fallback and Timeout](#circuit)
+- [Caching](#caching)
 - [Goto](#goto)
 - [External Context](#context)
-- [Zod State Manipulation](#zod)
+- [State Manipulation (Zod)](#zod)
 - [Progressive Response (HTTP SSE)](#progressive)
+- [Signal](#signal)
 - [Stream Steps](#steps)
 - [OpenTelemetry](#opentelemetry)
 
@@ -199,7 +202,7 @@ await pipeline(read, transform, write);
 
 ```
 
-### <a id="circuit"></a>Retry, Cache, Fallback and Timeout
+### <a id="circuit"></a>Retry, Fallback and Timeout
 
 ```typescript
 let errors: number;
@@ -252,6 +255,55 @@ const r = Runnable.init({
 );
 ```
 
+### <a id="caching"></a>Caching
+The cache must be set in the 'circuit' parameter and can be applied to the entire chain and/or to each individual step. It's important to assign a name to the cache so that only one cache object can be instantiated for each name/label (useful for external store adapters to avoid opening N connections). The cache system used is [Keyv](https://github.com/jaredwray/keyv) thus any Keyv-compatible adapter can be used. By default, the QuickLRU cache is used.
+
+```typescript
+// Fixed Params
+const cache = {
+{
+      name: 'cache-map',
+      store: new Map(),
+      active: true,
+      cacheKeyStrategy: [ 'a', 'b', 'c' ], // get those keys
+      ttlStrategy: 10000, // ms
+      timeout: 200 // ms
+}
+
+// Dynamic Params
+{
+      name: 'cache-LRU',
+      store: undefined, // if omitted -> dafault QuickLRU cache
+      maxSize: 100, // max object in LRU cache [default 1000] 
+      active: (state:any) => state.type !== "j",
+      cacheKeyStrategy: (state:any) =>{
+	      if(staet.type === "k") return `${state.a}:${state.c}`
+	      return `${state.b}:${state.c}`
+      },
+      ttlStrategy: (state:any) =>{
+	      if(state.type === "k") return 1000;
+	      return 1000 * 60 * 24;
+      },
+      timeout: 200
+    }
+
+// Cache Store Adaptor eg. Redis
+import KeyvRedis from "@keyv/redis";
+
+ const keyvRedis = new KeyvRedis("redis://localhost:6379");
+const cache = {
+	name: "cache-redis",
+	store: keyvRedis
+}
+ 
+// Set Chain Cache
+const chain = Runnable.init({circuit:{ cache }})
+
+// Set Step Cache
+const chain = Runnable.init({}).pipe((state:any)=>{
+	...
+},{circuit:{ cache }})
+```
 
 ### <a id="goto"></a>Goto
 
@@ -302,7 +354,7 @@ const main = Runnable.init({ name: "context:main:seq", ctx }).assign({
 const state = await main.run({});
 ```
 
-### <a id="zod"></a>State Manipulation (Zod)
+### <a id="zod"></a>State Manipulation ([Zod](https://github.com/colinhacks/zod))
 
 ```typescript
 import { z } from "zod";
@@ -334,6 +386,19 @@ const pipeAndPickSeq = Runnable.init({ name: "zod:pipe:pick:seq" })
 const pickAndPipeSeq = Runnable.init({ name: "zod:pick:pipe:seq" })
   .pick(schema, { name: "filter:ingress" })
   .push((state: any) => state);
+```
+
+
+### <a id="signal"></a> Signal
+
+```typescript
+// Immediately Abort
+const signal = AbortSignal.abort();
+const res = await chain.run({}, { signal }));
+
+// Abort on Timeout
+const signal = AbortSignal.timeout(50);
+const res = await chain.run({}, { signal }));
 ```
 
 ### <a id="progressive"></a>Progressive Response (HTTP SSE)
@@ -441,6 +506,7 @@ const sdk = new NodeSDK({
 sdk.start();
 ```
 
+![Jeager Example](https://raw.githubusercontent.com/ttessarolo/runnify/main/public/opentelemetry.png)
 
 ## License
 Licensed under [MIT](./LICENSE).

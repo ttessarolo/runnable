@@ -32,10 +32,6 @@ import {
   handleAll,
   wrap
 } from "cockatiel";
-//https://github.com/App-vNext/Polly/wiki/PolicyWrap
-// Others
-// https://github.com/genesys/mollitia
-// https://github.com/Diplomatiq/resily
 import { isExecutable, isFunc, sleep } from "./utils.js";
 import Cache, { cacheFactory } from "./cache.js";
 import {
@@ -54,7 +50,8 @@ import {
   EventType,
   RunnableParams,
   WrapOptions,
-  IteratorError
+  IteratorError,
+  RunnableAbortError
 } from "./types.js";
 
 /**
@@ -76,12 +73,12 @@ export default class Runnable {
   private nodes: Map<string, number>;
   private iteractionCount: number = 0;
   private subEvents: EventType[];
-  private context: any;
+  private ctx: any;
   private tracer: Tracer;
   private meter: Meter;
   private runDuration: Histogram;
   private runId: string;
-  private aborted: boolean = false;
+  private signal?: AbortSignal;
   private wrappedFncs: number = 0;
   private circuit?: WrapOptions;
 
@@ -93,17 +90,19 @@ export default class Runnable {
     this.nodes = params.nodes ?? new Map();
     this.steps = params.steps ?? [];
     this.subEvents = params.subEvents ?? [];
-    this.context = params.ctx;
+    this.ctx = params.ctx;
     this.runId = params.runId ?? uuidv4();
     this.subEvents.forEach((event: EventType) =>
       this.emitter.on(event.name, event.listener)
     );
     this.circuit = params.circuit;
-
+    this.signal = params.signal;
     this.iterator = this.stepsIterator();
     this.tracer = trace.getTracer("runnable:tracer");
     this.meter = metrics.getMeter("runnable:meter");
     this.runDuration = this.meter.createHistogram("runnable.run.duration");
+
+    if (this.signal?.aborted) throw new RunnableAbortError(this.signal?.reason);
 
     return this;
   }
@@ -205,13 +204,14 @@ export default class Runnable {
     if (policies.length > 0) {
       return async function (this: any) {
         const _that = this;
+
         const R =
           (await cache.get(_that.state, _that.emitter)) ??
           ((await wrap(...policies).execute(() => {
             return options?.avoidExec
               ? fnc.call(_this, ...arguments)
               : _this._exec(fnc);
-          })) as object);
+          }, _that.signal)) as object);
         await cache.set(R, _that.emitter);
         return R;
       };
@@ -226,7 +226,7 @@ export default class Runnable {
   }
 
   private wrapStepFncs(step: Step) {
-    // Skip wrapping loop chain functions
+    // Skip wrapping useless chain functions
     if (
       [
         StepType.START,
@@ -429,11 +429,7 @@ export default class Runnable {
     } else stato = structuredClone(this.state);
 
     return fnc instanceof Runnable
-      ? await fnc.run(stato, {
-          emitter: this.emitter,
-          ctx: this.context,
-          runId: this.runId
-        })
+      ? await fnc.run(stato, this.getBasicParams())
       : await this.tracer.startActiveSpan(
           `${this.name}:func:exec${
             fnc.name ? `:${fnc.name.replace("bound ", "")}` : ""
@@ -446,7 +442,8 @@ export default class Runnable {
               }
               const response = await fnc.call(this, stato, {
                 emit: this.emitter.emit.bind(this.emitter),
-                ctx: this.context
+                ctx: this.ctx,
+                signal: this.signal
               } as RunFncParams);
               if (span.isRecording()) {
                 if (span.isRecording()) {
@@ -506,7 +503,7 @@ export default class Runnable {
     fnc: Function,
     options: StepOptions = {}
   ): Promise<Runnable> {
-    await this._exec(fnc, options); //fnc(structuredClone(this.state), this.emitter);
+    await this._exec(fnc, options);
     return this;
   }
 
@@ -594,14 +591,13 @@ export default class Runnable {
     if (!Array.isArray(_loop)) throw new Error("Loop key must be an array");
     for (let i = 0, length = _loop.length; i < length; i++) {
       const element = _loop[i];
+      const params = this.getBasicParams();
       const runnable = Runnable.init({
-        emitter: this.emitter,
-        ctx: this.context,
-        runId: this.runId,
+        ...params,
         name: `${this.name}:loop:${key}:${i}`
       });
-
       const result = await chain(runnable).run({ element, index: i });
+
       _loop[i] = { ...element, ...result.element };
     }
     return this;
@@ -737,18 +733,33 @@ export default class Runnable {
     return this.state;
   }
 
+  private getBasicParams(): RunnableParams {
+    return {
+      runId: this.runId,
+      name: this.name,
+      emitter: this.emitter,
+      maxIterations: this.maxIterations,
+      subEvents: this.subEvents,
+      ctx: this.ctx,
+      circuit: this.circuit,
+      signal: this.signal
+    };
+  }
+
   private clone(state: object = {}, params: RunnableParams = {}): Runnable {
     const stato = structuredClone(merge(this.state, state));
+
     const options: RunnableParams = {
-      runId: params.runId,
+      runId: params.runId ?? this.runId,
       name: params.name ?? this.name,
       emitter: params.emitter ?? new EventEmitter(),
-      maxIterations: this.maxIterations,
+      maxIterations: params.maxIterations ?? this.maxIterations,
       nodes: params.nodes ?? this.nodes,
       steps: params.steps ?? this.steps,
       subEvents: params.subEvents ?? this.subEvents,
-      ctx: this.context,
-      circuit: params.circuit ?? this.circuit
+      ctx: params.ctx ?? this.ctx,
+      circuit: params.circuit ?? this.circuit,
+      signal: params.signal ?? this.signal
     };
 
     const runnable = new Runnable(stato, options);
@@ -762,7 +773,7 @@ export default class Runnable {
   }
 
   /**
-   * Invokes the runnable with the given state and parameters.
+   * Invokes/Run the runnable with the given state and parameters.
    *
    * @param state - The state to be passed to the runnable.
    * @param params - The parameters to be passed to the runnable. Default is an empty object.
@@ -772,43 +783,45 @@ export default class Runnable {
     return this.run(state, params);
   }
 
-  /**
-   * Runs the `Runnable` instance.
-   *
-   * @param state - The initial state for the `Runnable` instance.
-   * @param params - Additional parameters for the `Runnable` instance.
-   * @returns A promise that resolves to the fallback value or the state of the `Runnable` instance.
-   * @throws If an error occurs during execution.
-   */
-  async run(state?: RunState, params: RunnableParams = {}) {
-    const startTime = new Date().getTime();
+  run(state?: RunState, params: RunnableParams = {}) {
     const rnb = this.clone(state, params);
+    const circuit = params.circuit ?? rnb.circuit;
+    const name = params.name ?? rnb.name ?? "runnable";
+    const startTime = new Date().getTime();
 
-    return rnb
-      .getTracer()
-      .startActiveSpan(this.name ?? "runnable", async (span: Span) => {
-        rnb.setSpanAttr(span);
-        try {
-          const wrappedIterate = await rnb.wrapFnc(rnb.iterate, {
-            ...(params.circuit ?? rnb.circuit),
-            name: "start",
-            avoidExec: true
-          });
-          const fallback = await wrappedIterate.call(rnb);
-          return fallback ?? rnb.getState();
-        } catch (ex) {
-          if (ex instanceof Error) {
-            span.recordException(ex);
-          }
+    return new Promise((resolve, reject) => {
+      rnb.getTracer().startActiveSpan(name, (span: Span) => {
+        const abort = (err: any) => {
+          const ex: Error =
+            err instanceof Error
+              ? err
+              : new RunnableAbortError(rnb.signal?.reason);
+
+          span.recordException(ex);
           span.setStatus({ code: SpanStatusCode.ERROR });
-          throw ex;
-        } finally {
+
+          reject(ex);
+        };
+
+        const close = () => {
           const endTime = new Date().getTime();
           const executionTime = endTime - startTime;
           rnb.runDuration.record(executionTime);
+          rnb.signal?.removeEventListener("abort", abort);
           span.end();
-        }
+        };
+
+        rnb.signal?.addEventListener("abort", abort);
+        rnb.setSpanAttr(span);
+
+        rnb
+          .wrapFnc(rnb.iterate, { ...circuit, name: "start", avoidExec: true })
+          .call(rnb)
+          .then((fallback: any) => resolve(fallback ?? rnb.getState()))
+          .catch(abort)
+          .finally(close);
       });
+    });
   }
 
   /**
