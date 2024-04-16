@@ -1,6 +1,6 @@
 {
   "name": "runnify",
-  "version": "1.6.26",
+  "version": "1.7.0",
   "description": "",
   "main": "./dist/index.js",
   "types": "./dist/types.d.ts",

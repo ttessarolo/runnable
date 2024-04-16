@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.7.0](https://bitbucket.org/ttessarolo/runnify/branches/compare/v1.6.26%0Dv1.7.0) (2024-04-16)
+
+
+### Features
+
+* signal + docs update ([d7c2789](https://github.com/ttessarolo/runnify/commits/d7c27896758f657c12f8dec294704affd9b820c3))
+
 ### [1.6.26](https://bitbucket.org/ttessarolo/runnify/branches/compare/v1.6.25%0Dv1.6.26) (2024-04-15)
 
 
