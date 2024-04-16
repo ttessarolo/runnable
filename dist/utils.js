@@ -1,5 +1,5 @@
 import get from "lodash.get";
-import Runnable from "./index.js";
+import { Runnable } from "./runnable.js";
 export const sleep = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
 export const isFunc = (obj) => obj instanceof Function || obj instanceof Promise;
 export const isExecutable = (obj) => obj instanceof Function || obj instanceof Promise || obj instanceof Runnable;

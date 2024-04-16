@@ -13,15 +13,3 @@ export var StepType;
     StepType["MILESTONE"] = "milestone";
     StepType["END"] = "end";
 })(StepType || (StepType = {}));
-export class IteratorError extends Error {
-    constructor(message) {
-        super(message);
-        this.name = "IterateError";
-    }
-}
-export class RunnableAbortError extends Error {
-    constructor(message) {
-        super(message);
-        this.name = "RunnableAbortError";
-    }
-}

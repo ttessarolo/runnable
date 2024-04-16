@@ -65,9 +65,9 @@ export class CacheFactory {
     }
   }
 }
-/** @ignore */
+/** @internal */
 export const cacheFactory = new CacheFactory();
-/** @ignore */
+/** @internal */
 export default class Cache {
   private sig?: { prefix?: string; stepName?: string; name?: string };
   private id?: string;

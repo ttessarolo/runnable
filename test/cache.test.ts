@@ -1,6 +1,6 @@
 import KeyvRedis from "@keyv/redis";
 import { expect, test } from "@jest/globals";
-import Runnable from "../dist/index.js";
+import { Runnable } from "../dist/index.js";
 import { RunCache, RunnableParams } from "../dist/types.js";
 import "./utils/instrumentation.js";
 

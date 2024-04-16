@@ -6,12 +6,12 @@
   "types": "./dist/types.d.ts",
   "type": "module",
   "scripts": {
-    "test": "jest --verbose ./test/cache.test.ts",
+    "test": "jest --verbose ./test/",
     "doc": "npx typedoc",
     "commit": "git add . && git-cz",
     "version": "standard-version",
     "push": "git push --follow-tags",
-    "release": "npm run commit && npm run version && npm run push && npm publish"
+    "release": "npm run test && npm run commit && npm run version && npm run push && npm publish"
   },
   "repository": {
     "type": "git",

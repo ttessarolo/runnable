@@ -1,5 +1,5 @@
 import { expect, test } from "@jest/globals";
-import Runnable from "../dist/index.js";
+import { Runnable } from "../dist/index.js";
 import { z } from "zod";
 import { sleep } from "./utils/index.js";
 import "./utils/instrumentation.js";

@@ -49,9 +49,9 @@ export class CacheFactory {
         }
     }
 }
-/** @ignore */
+/** @internal */
 export const cacheFactory = new CacheFactory();
-/** @ignore */
+/** @internal */
 export default class Cache {
     sig;
     id;

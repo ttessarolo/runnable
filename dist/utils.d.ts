@@ -1,5 +1,5 @@
 import { RunState } from "./types.js";
-import Runnable from "./index.js";
+import { Runnable } from "./runnable.js";
 export declare const sleep: (ms?: number) => Promise<unknown>;
 export declare const isFunc: (obj: any) => obj is Function;
 export declare const isExecutable: (obj: any) => obj is Function | Runnable;

@@ -1,10 +1,13 @@
+/**
+ * @module Types
+ * @description Types for Runnify
+ */
 import EventEmitter from "node:events";
 import { z } from "zod";
-import Runnable from "./index.js";
+import { Runnable } from "./runnable.js";
 import { CacheFactory } from "./cache.js";
 export type { Tracer, Meter } from "@opentelemetry/api";
 
-export type { Runnable };
 export type CacheFactoryType = CacheFactory;
 export type RunState = Record<string, unknown>;
 export enum StepType {
@@ -58,11 +61,13 @@ export type StepEvent = {
   state: RunState;
 };
 
+/** @internal */
 export type Iteration = {
   value: Step | null;
   done: boolean;
 };
 
+/** @internal */
 export type IteratorFunction = {
   next: () => Iteration;
 };
@@ -107,6 +112,7 @@ export interface RunCache {
 }
 export interface WrapOptions {
   name?: string;
+  /** @internal */
   avoidExec?: boolean;
   fallback?: Function | Runnable;
   cache?: RunCache;
@@ -126,18 +132,4 @@ export interface WrapOptions {
   };
   bulkhead?: number;
   timeout?: number;
-}
-
-export class IteratorError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "IterateError";
-  }
-}
-
-export class RunnableAbortError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "RunnableAbortError";
-  }
 }

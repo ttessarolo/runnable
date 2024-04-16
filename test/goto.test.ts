@@ -1,5 +1,5 @@
 import { expect, test } from "@jest/globals";
-import Runnable from "../dist/index.js";
+import { Runnable } from "../dist/index.js";
 import "./utils/instrumentation.js";
 
 test("op:pipe", async () => {

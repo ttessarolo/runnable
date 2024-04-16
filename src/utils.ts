@@ -1,6 +1,6 @@
 import get from "lodash.get";
 import { RunState } from "./types.js";
-import Runnable from "./index.js";
+import { Runnable } from "./runnable.js";
 
 export const sleep = (ms: number = 1000) =>
   new Promise((resolve) => setTimeout(resolve, ms));

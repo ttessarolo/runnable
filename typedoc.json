@@ -2,9 +2,13 @@
   "$schema": "https://typedoc.org/schema.json",
   "name": "Runnify",
   "includeVersion": true,
-  "entryPoints": ["./src/index.ts", "./src/types.ts", "./src/cache.ts"],
+  "entryPoints": [
+    "./src/runnable.ts",
+    "./src/types.ts",
+    "./src/cache.ts",
+    "./src/errors.ts"
+  ],
   "out": "docs",
-  "excludePrivate": true,
   "visibilityFilters": {
     "protected": false,
     "private": false,
@@ -13,6 +17,7 @@
     "@alpha": false,
     "@beta": false
   },
+  "excludePrivate": true,
   "excludeExternals": true,
   "excludeNotDocumented": false,
   "excludeInternal": true,

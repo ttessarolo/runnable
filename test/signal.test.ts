@@ -1,6 +1,6 @@
 import { expect, jest, test } from "@jest/globals";
-import Runnable from "../dist/index.js";
-import { RunnableAbortError, RunFncParams } from "../dist/types.js";
+import { Runnable, RunnableAbortError, RunFncParams } from "../dist/index.js";
+//import {  } from "../dist/types.js";
 import "./utils/instrumentation.js";
 
 jest.useFakeTimers();

@@ -15,9 +15,9 @@ export declare class CacheFactory {
     disconnect(name: string): void;
     disconnectAll(): void;
 }
-/** @ignore */
+/** @internal */
 export declare const cacheFactory: CacheFactory;
-/** @ignore */
+/** @internal */
 export default class Cache {
     private sig?;
     private id?;
