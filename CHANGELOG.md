@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.7.2](https://bitbucket.org/ttessarolo/runnify/branches/compare/v1.7.1%0Dv1.7.2) (2024-04-20)
+
+
+### Others
+
+* include dist folder in pack ([e066c33](https://github.com/ttessarolo/runnify/commits/e066c338bf2c13fc58a3002b6c1ed37ea9b236fe))
+
 ### [1.7.1](https://bitbucket.org/ttessarolo/runnify/branches/compare/v1.7.0%0Dv1.7.1) (2024-04-16)
 
 
