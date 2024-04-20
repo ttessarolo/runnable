@@ -17,6 +17,9 @@
     "@alpha": false,
     "@beta": false
   },
+  "navigationLinks": {
+    "GitHub": "https://github.com/ttessarolo/runnify"
+  },
   "excludePrivate": true,
   "excludeExternals": true,
   "excludeNotDocumented": false,

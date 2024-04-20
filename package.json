@@ -26,6 +26,9 @@
     "opentelemetry"
   ],
   "author": "Tommaso Tessarolo <ttessarolo@gmail.com>",
+  "files": [
+    "dist/"
+  ],
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "@keyv/redis": "^2.8.4",

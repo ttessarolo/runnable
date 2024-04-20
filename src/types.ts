@@ -10,6 +10,7 @@ export type { Tracer, Meter } from "@opentelemetry/api";
 
 export type CacheFactoryType = CacheFactory;
 export type RunState = Record<string, unknown>;
+/** @internal */
 export enum StepType {
   START = "start",
   PIPE = "pipe",
@@ -33,6 +34,7 @@ export type SwitchCase = {
 export type StepOptions = {
   name?: string;
   tags?: string[];
+  /** @internal */
   processAll?: boolean;
   mode?: "pipe" | "push";
   schema?: z.ZodType;
